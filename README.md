@@ -12,7 +12,7 @@
 | M0 하네스 | ✅ 완료 |
 | M1 정찰 | ⛔ **미완료 — `audeum.org` 접근 가능한 환경에서 `/recon` 실행 필요** |
 | M2 코어 로직 | ✅ 완료 (계약 비의존 부분) |
-| M3 폴링 루프 | ⏳ M1 필요 |
+| M3 폴링 루프 | 🟡 파이프라인 완성 · 어댑터만 M1 대기 |
 | M4 이메일 | ⏳ |
 | M5 대시보드 | ⏳ |
 | M6 자동 예약 | ⏳ |
@@ -25,9 +25,13 @@
 
 ```
 src/core/       사이트를 모르는 순수 로직 (타입·상태기계·매처·스케줄러·서킷·하트비트)
+src/runtime/    틱 파이프라인 — 부수효과를 전부 주입받으므로 DB·메일·사이트 없이 테스트된다
+src/store/      저장소 포트 + 인메모리 구현 (Postgres는 M3)
+src/notify/     알림 포트
 src/adapters/   사이트 계약이 격리되는 유일한 경계
 tests/          전부 오프라인. 실제 사이트를 호출하지 않는다
 docs/           site-contract.md · compliance.md · runbook.md
+deploy/         배포처 비교와 Cloud Run 절차
 PROMPT.md       전체 요구사항과 마일스톤
 CLAUDE.md       에이전트 작업 규칙
 ```
@@ -36,8 +40,21 @@ CLAUDE.md       에이전트 작업 규칙
 
 ```bash
 pnpm install
-pnpm verify      # typecheck + 테스트 (53개)
+pnpm verify      # typecheck + 테스트 (77개)
+pnpm simulate    # 3틱 시뮬레이션 — 상태 전이를 눈으로 확인
 ```
+
+## 실행
+
+하나의 이미지가 두 모드로 돈다. 배포처에 결합되어 있지 않다.
+
+```bash
+MODE=server npx tsx src/main.ts   # 대시보드 (기본)
+MODE=tick   npx tsx src/main.ts   # 틱 1회 후 종료 — M1 전까지는 의도적으로 실패한다
+```
+
+배포처 선택 근거와 절차는 `deploy/README.md` 참조.
+Vercel은 Hobby cron이 하루 1회라 탈락했고, **Cloud Run + Cloud Scheduler**를 채택했다.
 
 슬래시 커맨드: `/recon` `/dryrun` `/contract-check` `/verify`
 
