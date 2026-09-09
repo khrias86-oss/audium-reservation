@@ -1,0 +1,6 @@
+[
+  {"date":"2026-03-12","time":"10:00","status":"SOLD_OUT","remain":0,"capacity":20,"bookUrl":null},
+  {"date":"2026-03-12","time":"11:00","status":"SOLD_OUT","remain":0,"capacity":20,"bookUrl":null},
+  {"date":"2026-03-14","time":"10:00","status":"AVAILABLE","remain":1,"capacity":20,"bookUrl":"https://audeum.org/booking?d=2026-03-14&t=1000"},
+  {"date":"2026-03-14","time":"11:00","status":"SOLD_OUT","remain":0,"capacity":20,"bookUrl":null}
+]
