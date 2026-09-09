@@ -1,0 +1,28 @@
+{
+  "name": "audeum-reservation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "pnpm typecheck && pnpm test",
+    "simulate": "tsx scripts/simulate.ts",
+    "recon": "node scripts/recon-audeum.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "tsx": "^4.19.2",
+    "playwright": "^1.49.0"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  }
+}
