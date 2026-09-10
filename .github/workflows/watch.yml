@@ -23,8 +23,27 @@ name: 🔔 오디움 빈자리 감시
 # 105분인 이유는 2시간 간격에 15분 여유를 두기 위해서다. 예약이 늦게 도착해도
 # 앞 실행과 겹치지 않는다 (겹치면 concurrency 그룹에서 대기하느라 공백이 생긴다).
 #
-# 시작이 막히면 사람이 한 번 돌리면 된다 — Actions 탭 → 이 워크플로 → Run workflow.
-# 그 한 번으로 105분이 덮이고, 그 사이 예약이 살아나면 자동으로 이어진다.
+# ## 예약 실행이 아예 오지 않을 때 — 스스로 이어간다
+#
+# 실측이 더 나빴다. 시간표를 세 번 바꾸고 **2시간 40분을 지켜봤는데 예약 실행이
+# 단 한 번도 오지 않았다.** 루프 구조는 예약이 가끔이라도 와야 의미가 있는데,
+# 한 번도 오지 않으면 105분 뒤에 그냥 멈춘다.
+#
+# 그래서 **각 실행이 끝나면서 다음 실행을 스스로 건다.** 한 번만 시작하면
+# 예약 실행에 전혀 의존하지 않고 계속 이어진다.
+#
+# 이러려면 `CHAIN_TOKEN` 시크릿이 필요하다. Actions의 기본 토큰으로 워크플로를
+# 트리거하면 GitHub이 **의도적으로 무시한다** — 워크플로가 워크플로를 부르는
+# 무한 루프를 막기 위한 장치다. 그 장치를 존중하되, 사람이 명시적으로 넣은
+# 토큰으로는 이어가게 한다. 시크릿이 없으면 이어가지 않고 조용히 끝난다.
+#
+# **멈추는 방법은 감시 신청 이슈를 전부 닫는 것이다.** 이어가기 직전에 신청이
+# 남아 있는지 다시 확인하므로, 이슈를 닫으면 다음 실행이 걸리지 않는다.
+# 무한히 도는 것에는 반드시 사람이 끌 수 있는 스위치가 있어야 하고,
+# 이 시스템에서 그 스위치는 이미 이슈다.
+#
+# 시크릿이 없거나 이어가기가 실패해도 사람이 한 번 돌리면 된다 —
+# Actions 탭 → 이 워크플로 → Run workflow. 그 한 번으로 105분이 덮인다.
 #
 # ## 왜 5분인가
 #
@@ -155,3 +174,60 @@ jobs:
       - name: 감시 요청이 없을 때
         if: steps.check.outputs.count == '0'
         run: echo "감시 중인 항목이 없습니다. 이슈로 '빈자리 감시 신청'을 등록하세요." >> "$GITHUB_STEP_SUMMARY"
+
+      # 예약 실행을 믿을 수 없으므로 스스로 이어간다. 자세한 이유는 머리말에 있다.
+      - name: 다음 실행 이어가기
+        # always()인 이유: 확인이 몇 번 실패했다고 감시가 끊기면 안 된다.
+        # 실패했다는 것은 오히려 계속 지켜봐야 한다는 뜻이다.
+        if: always() && steps.check.outputs.count != '0'
+        env:
+          CHAIN_TOKEN: ${{ secrets.CHAIN_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -u
+          if [ -z "${CHAIN_TOKEN:-}" ]; then
+            {
+              echo ""
+              echo "### 이어가기 꺼짐"
+              echo ""
+              echo "\`CHAIN_TOKEN\` 시크릿이 없어 다음 실행을 걸지 않았습니다."
+              echo "감시를 계속하려면 **Run workflow**를 다시 누르거나, 시크릿을 등록하세요."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "CHAIN_TOKEN 없음 — 이어가지 않습니다."
+            exit 0
+          fi
+
+          # 루프가 도는 사이에 사용자가 신청을 닫았을 수 있다. 그게 유일한
+          # 정지 스위치이므로, 걸기 직전에 반드시 다시 확인한다.
+          still=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$REPO/issues?state=open&per_page=100" \
+            | grep -c '관람 희망 날짜' || true)
+          if [ "$still" = "0" ]; then
+            echo "감시 신청이 모두 닫혔습니다 — 이어가지 않습니다."
+            echo "감시 신청이 모두 닫혀 감시를 멈춥니다." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $CHAIN_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/$REPO/actions/workflows/watch.yml/dispatches" \
+            -d '{"ref":"main","inputs":{"loop_minutes":"105"}}')
+
+          if [ "$code" = "204" ]; then
+            echo "다음 실행을 걸었습니다 (감시 신청 ${still}건)."
+            echo "다음 감시를 이어서 걸었습니다 (신청 ${still}건)." >> "$GITHUB_STEP_SUMMARY"
+          else
+            # 여기서 실패하면 감시가 끊긴다. 조용히 넘기면 사용자가 모른다.
+            {
+              echo ""
+              echo "### ⚠️ 다음 실행을 걸지 못했습니다 (HTTP $code)"
+              echo ""
+              echo "감시가 여기서 멈춥니다. **Run workflow**를 눌러 다시 시작하세요."
+              echo "\`CHAIN_TOKEN\`에 이 저장소의 **Actions: Read and write** 권한이 있는지 확인하세요."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "이어가기 실패 (HTTP $code)"
+            exit 1
+          fi
