@@ -9,6 +9,7 @@
  * 실제 예약은 `DRY_RUN=false`가 명시적으로 설정될 때만 한다. 기본값은 확인만이다.
  */
 import { fetchSlotsForDates } from './adapters/audeum/http-flow.js';
+import { prepareBooking } from './booking/prepare.js';
 import { parseWatchRequests } from './config/watch-requests.js';
 import { createGitHubIssueNotifier } from './notify/github-issue.js';
 import { slotKey } from './core/types.js';
@@ -115,9 +116,24 @@ async function main(): Promise<void> {
   for (const request of requests) {
     const slot = openings.get(`${request.date}T${request.time}`);
     if (!slot) continue;
+
+    // 목록에서 여석으로 보였다고 예약이 되는 것은 아니다. 사이트 자신도 회차를
+    // 고른 뒤 서버에 매진을 한 번 더 물어본다(`rsMsg.message == "soldout"`).
+    // 재확인 비용은 1초이고, 그 값으로 사용자를 뛰게 만들어 놓고 배신하는
+    // 알림을 막는다.
+    const prepared = await prepareBooking(slot, 'exhibition');
+
+    if (prepared.kind === 'GONE') {
+      say(`\n- ${request.date} ${request.time}: 목록엔 있었지만 ${prepared.reason} — 알리지 않습니다`);
+      continue;
+    }
     matched++;
 
-    say(`\n🎉 **${request.date} ${request.time} 자리가 났습니다** (신청 #${request.issueNumber})`);
+    const seq = prepared.kind === 'READY' ? prepared.plan.reserveSeq : '';
+    say(`\n🎉 **${request.date} ${request.time} 자리가 났습니다** (신청 #${request.issueNumber})`
+      + (prepared.kind === 'UNVERIFIED' ? ` — 재확인은 못 했습니다: ${prepared.reason}` : '')
+      + (seq ? ` [회차 ${seq}]` : ''));
+
     await notifier.send({
       kind: 'NEEDS_ACTION',
       watch: {
