@@ -217,9 +217,18 @@ async function main() {
   for (const l of unique) log(`- [${l.text || '(텍스트 없음)'}] → ${l.href}`);
 
   // 예약 흐름으로 이어질 만한 링크만 추린다.
-  const BOOKING_HINT = /book|reserv|ticket|program|exhb|exhib|lecture|visit/i;
-  const promising = unique.filter((l) => BOOKING_HINT.test(l.href) && !/^mailto:|^tel:/.test(l.href));
-  log(`\n예약 흐름 후보 ${promising.length}개`);
+  // 3차 정찰에서 이 필터가 네비게이션 링크(/programs, /exhibitions)에 낚였다.
+  // 그 둘은 소개 페이지일 뿐 예약 화면이 아니다. 경로에 booking이 들어간 링크를
+  // 먼저 보고, 그 다음에야 나머지 후보를 본다.
+  const isBookingPath = (href) => /\/booking|booking\/|reserv|ticket/i.test(href);
+  const isNavPage = (href) => /\/(programs|exhibitions|about|visit)\/?$/i.test(href);
+
+  const internal = unique.filter((l) => l.href.startsWith(BASE) && !/^mailto:|^tel:/.test(l.href));
+  const promising = [
+    ...internal.filter((l) => isBookingPath(l.href)),
+    ...internal.filter((l) => !isBookingPath(l.href) && !isNavPage(l.href)),
+  ];
+  log(`\n예약 경로 우선 후보 ${promising.length}개 (booking 포함 ${internal.filter((l) => isBookingPath(l.href)).length}개)`);
 
   const pageReports = [];
   for (const link of promising.slice(0, 6)) {
@@ -233,12 +242,16 @@ async function main() {
     }
   }
 
-  // 내용이 가장 많은 페이지에서만 상호작용한다. 빈 껍데기를 클릭해봐야 의미가 없다.\n  const richest = pageReports.sort((a, b) => b.textLength - a.textLength)[0];
+  // 내용이 가장 많은 페이지에서만 상호작용한다. 빈 껍데기를 클릭해봐야 의미가 없다.
+  const richest = pageReports.sort((a, b) => b.textLength - a.textLength)[0];
 
+  // 상호작용 단계가 죽어도 아래의 JSON 응답·요약 섹션은 남겨야 한다.
+  // 3차 실행에서 여기서 던진 예외 하나가 리포트 후반부를 통째로 날렸다.
+  try {
   if (richest && richest.textLength > 0) {
-    log(`\n## 상호작용 대상: ${richest.finalUrl} (본문 ${richest.textLength}자)\n`);
+    log(`\n## 상호작용 대상: ${richest.url} (본문 ${richest.textLength}자)\n`);
     currentPhase = 'interact';
-    await page.goto(richest.finalUrl, { waitUntil: 'networkidle', timeout: 40_000 }).catch(() => {});
+    await page.goto(richest.url, { waitUntil: 'networkidle', timeout: 40_000 }).catch(() => {});
 
     const candidates = await page.$$eval('button, td, div, span, a, li', (els) =>
       els
@@ -283,6 +296,10 @@ async function main() {
     log(`- disabled 계열 셀렉터 매칭: ${disabledCount}개`);
   } else {
     log('\n**모든 후보 경로에서 본문 텍스트를 얻지 못했습니다.** 로그인이 필요하거나 봇 차단이 있을 수 있습니다.');
+  }
+  } catch (e) {
+    log(`\n**상호작용 단계에서 오류 발생:** ${e.message}`);
+    log('아래 섹션은 그대로 유효하니 참고하세요.');
   }
 
   await browser.close();
