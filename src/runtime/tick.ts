@@ -20,6 +20,7 @@ export interface TickDeps {
 export interface TickResult {
   readonly outcome:
     | 'POLLED'
+    | 'QUEUED'
     | 'BOOKED'
     | 'NEEDS_HUMAN'
     | 'CIRCUIT_OPEN'
@@ -93,19 +94,23 @@ export async function runTick(deps: TickDeps): Promise<TickResult> {
   // "조회가 성공했다"는 다른 신호이고, 둘을 섞으면 장애 원인을 못 가린다.
   await store.saveHeartbeat(now);
 
-  if (!result.ok) {
-    // 스키마가 깨진 것과 일시적 오류는 다르게 처리한다.
-    // 전자는 우리 코드가 낡은 것이고, 후자는 기다리면 낫는다.
-    const isDrift = result.reason.includes('schema') || result.reason.includes('스키마');
-    if (isDrift) {
-      for (const w of active) {
-        const r = applyEvent(w, { type: 'CONTRACT_DRIFT', reason: result.reason });
-        if (r.changed) await store.saveWatch(r.watch);
-      }
-      await notifier.send({ kind: 'SYSTEM_WARNING', reason: `사이트 구조가 바뀐 것으로 보입니다: ${result.reason}` });
-      return { outcome: 'CONTRACT_BROKEN', log: [...log, `계약 드리프트: ${result.reason}`] };
-    }
+  // 대기열은 "자리가 없다"도 "우리가 깨졌다"도 아니다. 확인 자체를 못 한 상태다.
+  // 스냅샷을 건드리지 않고 물러난다 — 대기열 응답으로 직전 관측을 덮으면
+  // 다음 틱에서 없던 슬롯이 "새로 열렸다"고 잘못 잡힌다.
+  if (result.kind === 'QUEUED') {
+    return { outcome: 'QUEUED', log: [...log, `대기열: ${result.message} — 이번 틱은 확인하지 못했습니다`] };
+  }
 
+  if (result.kind === 'CONTRACT_BROKEN') {
+    for (const w of active) {
+      const r = applyEvent(w, { type: 'CONTRACT_DRIFT', reason: result.reason });
+      if (r.changed) await store.saveWatch(r.watch);
+    }
+    await notifier.send({ kind: 'SYSTEM_WARNING', reason: `사이트 구조가 바뀐 것으로 보입니다: ${result.reason}` });
+    return { outcome: 'CONTRACT_BROKEN', log: [...log, `계약 드리프트: ${result.reason}`] };
+  }
+
+  if (result.kind === 'TRANSIENT_ERROR') {
     circuit = recordFailure(circuit, now);
     if (isOpen(circuit, now) && !circuit.alerted) {
       await notifier.send({ kind: 'SYSTEM_WARNING', reason: `조회가 연속 실패해 감시를 일시 중단합니다: ${result.reason}` });

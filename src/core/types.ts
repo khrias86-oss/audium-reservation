@@ -77,11 +77,22 @@ export interface Watch {
 }
 
 /**
- * 파싱 결과. "여석이 없다"와 "파서가 깨졌다"를 타입 수준에서 분리한다.
+ * 조회 결과.
  *
- * 대부분의 예약봇이 실패하는 지점이 여기다 — 사이트가 개편되면 파싱이 빈 배열을
- * 반환하고, 시스템은 "빈자리 없음"으로 착각한 채 조용히 영원히 실패한다.
+ * 네 가지를 명확히 구분한다. 이 구분이 이 시스템의 성패를 가른다.
+ *
+ * - `OK`               자리 상황을 실제로 확인했다
+ * - `QUEUED`           사이트가 대기열 페이지를 줬다 — 자리 상황을 **못 봤다**
+ * - `CONTRACT_BROKEN`  응답이 계약과 다르다 — 우리 코드가 낡았다
+ * - `TRANSIENT_ERROR`  네트워크·5xx 등 기다리면 나을 수 있는 문제
+ *
+ * 오디움은 혼잡 시 "동시접속자가 많아 잠시 대기 중입니다" 페이지를 HTTP 200으로
+ * 반환한다(5차 정찰 확인). 이걸 빈 슬롯 목록으로 뭉개면 시스템은 "빈자리 없음"을
+ * 조용히 반복하며 영원히 아무것도 잡지 못한다. 반대로 오류로 취급하면 정상 상황에
+ * 서킷이 열려 감시가 멈춘다. 그래서 별도 상태다.
  */
 export type ParseResult =
-  | { readonly ok: true; readonly slots: readonly Slot[] }
-  | { readonly ok: false; readonly reason: string; readonly raw?: unknown };
+  | { readonly kind: 'OK'; readonly slots: readonly Slot[] }
+  | { readonly kind: 'QUEUED'; readonly message: string }
+  | { readonly kind: 'CONTRACT_BROKEN'; readonly reason: string; readonly raw?: unknown }
+  | { readonly kind: 'TRANSIENT_ERROR'; readonly reason: string };
