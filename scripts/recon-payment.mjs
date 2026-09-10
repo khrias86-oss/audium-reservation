@@ -247,24 +247,43 @@ async function main() {
   } else {
     // 회차 조각에서 seq를 그대로 뽑아 쓴다. 사람이 손으로 옮겨 적으면 틀린 회차를
     // 가리킬 수 있고, 그건 예약 흐름에서 가장 위험한 종류의 실수다.
+    //
+    // 오늘 날짜만 보면 실패하기 쉽다. 지난 회차는 조각에서 빠지므로 오후에 돌리면
+    // 0개가 나온다. 그래서 앞으로 3주의 목·금·토를 훑어 회차가 있는 첫 날을 쓴다.
     let seq = process.env.PROBE_RESERVE_SEQ ?? '';
     let date = today;
+
     if (!seq) {
-      const probe = await post('/booking/time', timeBody).catch(() => null);
-      const m = probe?.text.match(/<seq_reserve[^>]*>([^<]+)</);
-      seq = m ? m[1].trim() : '';
-      log(seq ? `회차 조각에서 seq_reserve=${seq} (${date}) 를 얻었다.` : '회차가 없어 seq를 얻지 못했다.');
+      const candidates = [];
+      for (let i = 0; i < 22 && candidates.length < 8; i++) {
+        const d = new Date(Date.now() + 9 * 3600_000 + i * 86_400_000);
+        if ([4, 5, 6].includes(d.getUTCDay())) candidates.push(d.toISOString().slice(0, 10));
+      }
+      log(`회차를 찾을 날짜 후보: ${candidates.join(', ')}`);
+      for (const d of candidates) {
+        const probe = await post('/booking/time', `locale=ko&spectateDate=${d}&seqExhibition=1&language=ko`)
+          .catch(() => null);
+        const m = probe?.text.match(/<seq_reserve[^>]*>([^<]+)</);
+        if (m) { seq = m[1].trim(); date = d; break; }
+      }
+      log(seq ? `${date} 회차에서 seq_reserve=${seq} 를 얻었다.` : '앞으로 3주 안에 회차가 하나도 없다.');
     }
 
     if (!seq) {
-      log('회차가 없는 날이라 결제 화면을 열 수 없다. 관람일이 있는 날 다시 돌린다.');
+      log('회차가 없어 결제 화면을 열 수 없다. 예약이 열린 뒤 다시 돌린다.');
     } else {
-      // 파라미터 이름을 모르므로 사이트가 쓸 법한 조합을 순서대로 시도한다.
-      // 어느 것도 예약을 만들지 않는다 — 결제 **화면**을 그리는 호출이다.
+      // 4차 프로브가 /programs/booking 문서에서 흐름 전체를 읽어냈다. 렉처 쪽은
+      //   programs.selPayment = function(seqReserve) {
+      //     url: "/programs/payment",
+      //     param: {"locale": ..., "seqProgramReserveList": seqReserve}
+      //   }
+      // 이고, 전시 쪽은 대칭이다 — 회차 조각의 스크립트가 예약 직전에
+      // `booking.seqExhibitionReserveList = 0`을 초기화하는 것이 그 증거다.
+      // 그래서 첫 번째 조합이 정답일 가능성이 높고, 나머지는 보험이다.
       const attempts = [
-        `locale=ko&seqExhibitionReserve=${seq}&seqExhibition=1&spectateDate=${date}&language=ko`,
-        `locale=ko&seqReserve=${seq}&seqExhibition=1&spectateDate=${date}&language=ko`,
-        `locale=ko&seq=${seq}&seqExhibition=1&language=ko`,
+        `locale=ko&seqExhibitionReserveList=${seq}&language=ko`,
+        `locale=ko&seqExhibitionReserveList=${seq}&seqExhibition=1&spectateDate=${date}&language=ko`,
+        `locale=ko&seqExhibitionReserve=${seq}&seqExhibition=1&language=ko`,
       ];
       for (const body of attempts) {
         let r;
