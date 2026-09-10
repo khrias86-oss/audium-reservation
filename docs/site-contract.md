@@ -248,3 +248,136 @@ com.msg("예약가능한 시간이 아닙니다.");
 ## 정찰 결과 요약
 
 _(M1 완료 후 작성)_
+
+---
+
+## 🚀 11~14차 정찰: 브라우저가 필요 없었다
+
+11차에서 처음으로 **요청**을 캡처했다. 10차까지는 응답만 알았기 때문에, 그 응답을
+얻어내려고 브라우저로 클릭을 흉내내고 있었다. 캡처해 보니 회차 조회는 이랬다.
+
+```
+POST https://audeum.org/booking/time
+content-type: application/x-www-form-urlencoded; charset=UTF-8
+referer: https://audeum.org/booking
+(쿠키 없음)
+
+locale=ko&spectateDate=2026-09-10&seqExhibition=1&language=ko
+```
+
+**쿠키도, 토큰도, 선행 요청도 없다.** 브라우저는 이 POST를 만들어내려고 돌리던
+것이지 답을 얻는 데 필요한 것이 아니었다.
+
+| | 브라우저 방식 | HTTP 방식 |
+|---|---|---|
+| 확인 1회 | 약 44초 (설치 23 + 조작 21) | **1.085초** (실측, 12차) |
+| 의존성 | Playwright + 크로미움 | `fetch` |
+| 실패 지점 | 렌더 타이밍·셀렉터·클릭 쿨다운 | HTTP 상태 코드 |
+
+NetFunnel 대기열은 **결제 앞**에 걸려 있어서(`act_3`), 조회는 통과할 필요조차 없다.
+페이지 자체에도 게이트가 있지만(`act_1`), 조각 엔드포인트는 그것과 무관하게 응답한다.
+
+### 상품 식별자
+
+| 상품 | 파라미터 | 값 |
+|---|---|---|
+| 전시 《정음(正音): 소리의 여정》 | `seqExhibition` | `1` |
+| 렉처 〈프랑스를 듣다〉 | `seqProgram` | `7` |
+
+값이 틀리면 4xx가 온다. 그래서 어댑터는 4xx를 **계약 파손**으로 올린다 —
+"자리 없음"으로 넘기면 사이트 개편을 영영 눈치채지 못한다. 5xx는 사이트 장애이므로
+일시 오류로 다룬다.
+
+## 📅 사이트가 공지한 운영 일정 (12차, `/booking/date` 응답)
+
+```
+[다음 예약일 안내]
+전시 《정음(正音): 소리의 여정》
+  예약 오픈 일시 : 9월 22일(화) 오후 2시
+  예약 가능일   : 9월 24, 26일 & 10월 1, 2, 3일 (목, 금, 토)
+* 오디움은 2026년 9월 25일(금) 추석 당일 휴관합니다.
+* 전시 예약은 격주 화요일 오후 2시(KST)에 오픈됩니다.
+```
+
+이 공지가 **폴링 시간표의 근거**다. 전시는 목·금·토만 열리고 예약은 격주로 오픈되므로,
+상시 폴링은 대부분의 시간을 헛돈다. `watch.yml`은 수~토 09~22시(KST)로 좁혀
+월 약 1,370분을 쓴다 (무료 한도 2,000분).
+
+## 🔑 14차 정찰: 예약 흐름의 정의를 찾았다
+
+`booking` 객체는 조각에도, 외부 번들에도 없었다. `/booking` 페이지의 인라인
+스크립트는 1,011자짜리 NetFunnel 게이트 하나뿐이다. 흐름의 정의는 **흐름 문서**에
+있었다 — `GET /programs/booking` (9,258자)이 렉처 쪽 전체를 담고 있고,
+전시 쪽은 대칭이다.
+
+### 요청 헬퍼 (`/js/common.js`)
+
+```js
+com.execController = function(options, param) {
+    if(param.language == null || param.language == "") param.language = com.getLanguage();
+    $.ajax({ url: options.url, data: param, type:'POST', cache:false, async: options.async||false,
+             success: options.submitDoneHandler, error: options.submitErrorHandler });
+};
+```
+
+폼 인코딩 POST 하나다. 우리 어댑터가 보내는 것과 정확히 같다.
+
+### 결제 화면 호출
+
+```js
+programs.selPayment = function(seqReserve, isMove){
+    programs.seqProgramReserveList = 0;
+    if( $(".payment-form").children().length <= 0 ){
+        var options = { url : "/programs/payment", async: false,
+            submitDoneHandler : function(e){ $(".payment-form").html(e); ... },
+            submitErrorHandler : function(e){
+                //매진시 재조회
+                if(e.responseJSON.rsMsg.message == "soldout"){ programDate.selTime(programDate.spectateDate); }
+            } };
+        var param = {"locale" : com.getLanguage(), "seqProgramReserveList" : seqReserve};
+        com.execController(options, param);
+    } else {
+        var service = {serviceName : "bookingService", methodName : "isSoldoutCheckProgram"};
+        var param = {"locale" : com.getLanguage(), "seqProgramReserveList" : seqReserve};
+        com.execAjax(options, service, param);
+    }
+};
+```
+
+두 가지가 중요하다.
+
+1. **파라미터 이름은 `seqExhibitionReserveList`다** (렉처는 `seqProgramReserveList`).
+   10차에 캡처한 회차 조각이 예약 직전에 `booking.seqExhibitionReserveList = 0`을
+   초기화하는 것이 전시 쪽 대칭의 증거다.
+2. **매진은 서버가 `rsMsg.message == "soldout"`으로 알려준다.** 우리는 조각의
+   `disabled-time-slots` 클래스로 판별하는데, 이건 사이트 자신의 클릭 핸들러와
+   같은 규칙이므로 유효하다. 다만 **회차를 고른 뒤 서버가 한 번 더 확인한다**는
+   뜻이므로, 감지와 예약 사이에 자리가 사라질 수 있다.
+
+### 🚨 예약 폼에 휴대폰 본인인증이 있다
+
+같은 함수의 뒷부분이 결제 화면의 입력 요소를 다룬다.
+
+```js
+$("#input_spectatorNm").val(programs.param.spectatorNm);
+$("#input_spectatorEmail").val(programs.param.spectatorEmail);
+programPayment.input.value = programs.param.spectatorMobilephone;
+
+$(programPayment.input).attr('disabled', true);
+$('.telephone-inner-wrapper .send-num-btn').hide();
+
+$("#btn_reserve").removeAttr("disabled");
+```
+
+읽어야 할 것은 **마지막 세 줄이 "기존 예약 변경"일 때만 실행된다**는 점이다.
+새 예약에서는 휴대폰 입력이 열려 있고, `.send-num-btn`(인증번호 발송)이 보이며,
+`#btn_reserve`는 **disabled인 채로 시작한다.**
+
+즉 예약을 완료하려면 **문자로 온 인증번호를 사람이 입력해야 한다.**
+
+이것은 우회할 대상이 아니라 **설계 조건**이다. 인증번호는 사용자 폰으로만 오고,
+본인확인을 자동으로 뚫는 코드는 `CLAUDE.md`가 금지한다. 오디움 자신도
+"대리 예매 및 양도 불가, 본인 이름으로 예약, 실물 신분증 지참"을 명시한다.
+
+따라서 자동 예약의 현실적인 최대치는 **인증번호 직전까지 자동으로 밀어 두고,
+사람은 번호 하나만 넣는 것**이다. 자세한 설계는 `docs/auto-booking.md`.
