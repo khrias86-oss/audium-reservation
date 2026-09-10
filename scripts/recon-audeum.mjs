@@ -147,6 +147,13 @@ async function main() {
   });
   const page = await context.newPage();
 
+  // 페이지가 거의 비어 보이는 이유가 JS 예외일 수 있다. 콘솔과 pageerror를 모은다.
+  const consoleErrors = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(`[console] ${msg.text().slice(0, 300)}`);
+  });
+  page.on('pageerror', (err) => consoleErrors.push(`[pageerror] ${err.message.slice(0, 300)}`));
+
   let currentPhase = 'init';
   page.on('request', (req) => {
     if (['xhr', 'fetch', 'document'].includes(req.resourceType())) {
@@ -194,6 +201,24 @@ async function main() {
       log('```');
     }
 
+    // 본문 텍스트가 거의 없을 때는 원본 HTML을 직접 봐야 한다. 빈 캘린더 컨테이너인지,
+    // "예약 가능한 프로그램 없음"인지, JS 번들이 죽은 건지는 DOM에만 드러난다.
+    if (text.length < 600 && html.length > 0) {
+      log('원본 HTML (본문이 짧아 구조를 직접 확인):');
+      log('```html');
+      // <head>의 메타/스크립트 태그는 잘라내고 body 위주로 본다.
+      const bodyStart = html.indexOf('<body');
+      const shown = bodyStart >= 0 ? html.slice(bodyStart) : html;
+      log(shown.slice(0, 6000).replace(/\s{2,}/g, ' '));
+      log('```');
+    }
+
+    if (consoleErrors.length > 0) {
+      log(`JS 오류 ${consoleErrors.length}건:`);
+      for (const e of consoleErrors.slice(0, 8)) log(`- ${e}`);
+      consoleErrors.length = 0;
+    }
+
     const slug = label.replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 40);
     writeFileSync(`${OUT}/${slug}.html`, html);
     await page.screenshot({ path: `${OUT}/${slug}.png`, fullPage: true }).catch(() => {});
@@ -230,8 +255,20 @@ async function main() {
   ];
   log(`\n예약 경로 우선 후보 ${promising.length}개 (booking 포함 ${internal.filter((l) => isBookingPath(l.href)).length}개)`);
 
+  // 4차에서 링크 후순위 규칙이 /home, /about까지 방문해 예산을 썼다.
+  // 예약 경로만 남기고, 한국어 페이지도 함께 본다 — 회차 표기가 다를 수 있다.
+  const FORCED = [
+    { text: '전시 예약', href: `${BASE}/booking/exhbition` },
+    { text: '강의 예약', href: `${BASE}/programs/booking` },
+    { text: '한국어 예약', href: `${BASE}/kr/booking` },
+  ];
+  const targets = [
+    ...FORCED,
+    ...promising.filter((l) => isBookingPath(l.href) && !FORCED.some((f) => f.href === l.href)),
+  ];
+
   const pageReports = [];
-  for (const link of promising.slice(0, 6)) {
+  for (const link of targets.slice(0, 6)) {
     currentPhase = link.href;
     try {
       await page.goto(link.href, { waitUntil: 'networkidle', timeout: 40_000 });
