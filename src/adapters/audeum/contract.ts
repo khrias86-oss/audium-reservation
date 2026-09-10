@@ -193,3 +193,74 @@ export function assertContractReady(contract: AudeumContract = CONTRACT): void {
     );
   }
 }
+
+/**
+ * 예약 흐름의 **요청** 계약 — 11차 정찰에서 실제 요청을 캡처해 확인했다.
+ *
+ * ## 왜 이것이 중요한가
+ *
+ * 10차까지는 응답만 알았기 때문에 브라우저로 클릭을 흉내내야 했다. 확인 1회에
+ * 약 44초(크로미움 설치 23초 + 조작 21초)가 들었고, 그 대부분은 질문 자체와
+ * 무관한 비용이었다.
+ *
+ * 11차에서 요청을 캡처해 보니 회차 조회는 **평범한 폼 POST 하나**였다.
+ * 쿠키도, 토큰도, 선행 요청도 필요 없다. 즉 브라우저가 필요 없다.
+ *
+ * ```
+ * POST https://audeum.org/booking/time
+ * content-type: application/x-www-form-urlencoded; charset=UTF-8
+ * referer: https://audeum.org/booking
+ *
+ * locale=ko&spectateDate=2026-09-10&seqExhibition=1&language=ko
+ * ```
+ *
+ * NetFunnel 대기열은 이 단계가 아니라 결제(`selPayment`) 앞에 걸려 있으므로
+ * **조회는 대기열을 통과할 필요조차 없다.** 다만 사이트가 혼잡하면 이 응답
+ * 자리에 대기열 페이지가 올 수 있어 `isQueuePage()` 판별은 유지한다.
+ */
+export const ORIGIN = 'https://audeum.org';
+
+/** 사이트가 쓰는 폼 필드 이름. 오타나 대소문자까지 사이트를 그대로 따른다. */
+export const REQUEST_FIELDS = {
+  locale: 'locale',
+  language: 'language',
+  /** 날짜. `YYYY-MM-DD` */
+  spectateDate: 'spectateDate',
+  /** 회차 식별자 — 제출 단계에서 쓴다 */
+  spectateTime: 'spectateTime',
+  /** 전시 상품 식별자 */
+  seqExhibition: 'seqExhibition',
+  /** 렉처 상품 식별자 */
+  seqProgram: 'seqProgram',
+} as const;
+
+/**
+ * 상품 식별자 — 11차 정찰에서 관측한 값이다.
+ *
+ * 사이트가 전시를 새로 걸면 이 번호가 바뀐다. 그래서 값이 틀렸을 때
+ * "자리 없음"이 아니라 `CONTRACT_BROKEN`으로 드러나야 한다 (어댑터가 그렇게 한다).
+ */
+export const PRODUCT_SEQ = {
+  /** 《정음(正音): 소리의 여정》 */
+  exhibition: '1',
+  /** 〈프랑스를 듣다〉 — `/programs/age`가 500을 반환한 적이 있다 */
+  lecture: '7',
+} as const;
+
+/** 사이트가 실제로 보낸 헤더. 위조가 아니라 관측한 값을 그대로 쓴다. */
+export const REQUEST_HEADERS = {
+  'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+  referer: BOOKING_PAGE_URL,
+  'x-requested-with': 'XMLHttpRequest',
+} as const;
+
+/**
+ * 사이트가 `/booking/date` 응답에 실어 보내는 예약 오픈 공지.
+ *
+ * 격주 화요일 14시에만 열리므로, 이 공지를 읽으면 **언제 폴링해야 의미가 있는지**
+ * 알 수 있다. 상시 폴링은 대부분의 시간을 낭비한다.
+ */
+export const NOTICE_MARKERS = {
+  openTable: '[다음 예약일 안내]',
+  availableDates: '예약 가능일',
+} as const;

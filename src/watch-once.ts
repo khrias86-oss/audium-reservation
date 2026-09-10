@@ -8,8 +8,7 @@
  *
  * 실제 예약은 `DRY_RUN=false`가 명시적으로 설정될 때만 한다. 기본값은 확인만이다.
  */
-import { chromium } from 'playwright';
-import { fetchSlotsViaBrowser } from './adapters/audeum/browser-flow.js';
+import { fetchSlotsForDates } from './adapters/audeum/http-flow.js';
 import { parseWatchRequests } from './config/watch-requests.js';
 import { createGitHubIssueNotifier } from './notify/github-issue.js';
 import { slotKey } from './core/types.js';
@@ -65,70 +64,75 @@ async function main(): Promise<void> {
   }
   say(`\n감시 중: ${requests.map((r) => `${r.date} ${r.time}`).join(', ')}`);
 
-  const browser = await chromium.launch();
-  try {
-    const result = await fetchSlotsViaBrowser(browser, 'exhibition');
+  // 사이트가 주는 날짜를 전부 훑지 않고, **신청한 날짜만** 물어본다.
+  // 요청 수가 감시 항목 수에 비례해 늘어나지, 사이트 사정에 좌우되지 않는다.
+  const dates = [...new Set(requests.map((r) => r.date))];
+  const { result, perDate, elapsedMs } = await fetchSlotsForDates(dates, 'exhibition');
+  say(`요청 ${dates.length}건 / ${(elapsedMs / 1000).toFixed(1)}초`);
 
-    if (result.kind === 'QUEUED') {
-      // 대기열은 장애가 아니다. 이번 회차만 확인을 못 했을 뿐이므로 조용히 넘어간다.
-      say(`\n대기열 상태입니다 — 이번 확인은 건너뜁니다. (${result.message})`);
-      return;
-    }
-
-    if (result.kind === 'TRANSIENT_ERROR') {
-      say(`\n일시적인 오류로 확인하지 못했습니다: ${result.reason}`);
-      return;
-    }
-
-    if (result.kind === 'CONTRACT_BROKEN') {
-      // 이건 조용히 넘어가면 안 된다. 사이트가 바뀌었는데 모르고 계속 "자리 없음"을
-      // 반복하는 것이 이 시스템의 가장 위험한 실패 방식이다.
-      say(`\n🚨 **사이트 구조가 바뀐 것으로 보입니다:** ${result.reason}`);
-      const notifier = createGitHubIssueNotifier({ owner: owner!, repo: repo!, token: token! });
-      await notifier.send({
-        kind: 'SYSTEM_WARNING',
-        reason: `빈자리를 확인할 수 없습니다. ${result.reason}\n\n확인이 멈춘 동안 빈자리를 놓치고 있을 수 있습니다.`,
-      });
-      process.exitCode = 1;
-      return;
-    }
-
-    const openings = new Map(
-      result.slots.filter((s) => s.status === 'AVAILABLE').map((s) => [slotKey(s), s]),
-    );
-    say(`\n확인한 회차 ${result.slots.length}개 중 여석 ${openings.size}개`);
-
-    for (const slot of result.slots) {
-      say(`- ${slot.date} ${slot.time} — ${slot.status === 'AVAILABLE' ? '✅ 여석' : '매진'}`);
-    }
-
-    const notifier = createGitHubIssueNotifier({ owner: owner!, repo: repo!, token: token! });
-    let matched = 0;
-
-    for (const request of requests) {
-      const slot = openings.get(`${request.date}T${request.time}`);
-      if (!slot) continue;
-      matched++;
-
-      say(`\n🎉 **${request.date} ${request.time} 자리가 났습니다** (신청 #${request.issueNumber})`);
-      await notifier.send({
-        kind: 'NEEDS_ACTION',
-        watch: {
-          id: `${request.date}T${request.time}`, userId: owner!,
-          date: request.date, time: request.time, priority: request.priority, state: 'DETECTED',
-        },
-        slot,
-        reason: liveBooking
-          ? '자동 예약을 시도합니다.'
-          : '지금은 확인만 하는 모드입니다. 아래 링크로 직접 예약하세요.',
-        resumeUrl: slot.bookUrl,
-      });
-    }
-
-    if (matched === 0) say('\n신청한 날짜·회차에는 아직 자리가 없습니다.');
-  } finally {
-    await browser.close().catch(() => { /* 정리 실패는 결과에 영향 없음 */ });
+  if (result.kind === 'QUEUED') {
+    // 대기열은 장애가 아니다. 이번 회차만 확인을 못 했을 뿐이므로 조용히 넘어간다.
+    say(`\n대기열 상태입니다 — 이번 확인은 건너뜁니다. (${result.message})`);
+    return;
   }
+
+  if (result.kind === 'TRANSIENT_ERROR') {
+    say(`\n일시적인 오류로 확인하지 못했습니다: ${result.reason}`);
+    return;
+  }
+
+  if (result.kind === 'CONTRACT_BROKEN') {
+    // 이건 조용히 넘어가면 안 된다. 사이트가 바뀌었는데 모르고 계속 "자리 없음"을
+    // 반복하는 것이 이 시스템의 가장 위험한 실패 방식이다.
+    say(`\n🚨 **사이트 구조가 바뀐 것으로 보입니다:** ${result.reason}`);
+    const notifier = createGitHubIssueNotifier({ owner: owner!, repo: repo!, token: token! });
+    await notifier.send({
+      kind: 'SYSTEM_WARNING',
+      reason: `빈자리를 확인할 수 없습니다. ${result.reason}\n\n확인이 멈춘 동안 빈자리를 놓치고 있을 수 있습니다.`,
+    });
+    process.exitCode = 1;
+    return;
+  }
+
+  for (const [date, one] of perDate) {
+    if (one.kind === 'OK') continue;
+    // 전체는 성공했지만 이 날짜만 못 봤다는 뜻이다. 묻히지 않게 남긴다.
+    say(`- ⚠️ ${date}: ${one.kind === 'QUEUED' ? one.message : one.reason}`);
+  }
+
+  const openings = new Map(
+    result.slots.filter((s) => s.status === 'AVAILABLE').map((s) => [slotKey(s), s]),
+  );
+  say(`\n확인한 회차 ${result.slots.length}개 중 여석 ${openings.size}개`);
+
+  for (const slot of result.slots) {
+    say(`- ${slot.date} ${slot.time} — ${slot.status === 'AVAILABLE' ? '✅ 여석' : '매진'}`);
+  }
+
+  const notifier = createGitHubIssueNotifier({ owner: owner!, repo: repo!, token: token! });
+  let matched = 0;
+
+  for (const request of requests) {
+    const slot = openings.get(`${request.date}T${request.time}`);
+    if (!slot) continue;
+    matched++;
+
+    say(`\n🎉 **${request.date} ${request.time} 자리가 났습니다** (신청 #${request.issueNumber})`);
+    await notifier.send({
+      kind: 'NEEDS_ACTION',
+      watch: {
+        id: `${request.date}T${request.time}`, userId: owner!,
+        date: request.date, time: request.time, priority: request.priority, state: 'DETECTED',
+      },
+      slot,
+      reason: liveBooking
+        ? '자동 예약을 시도합니다.'
+        : '지금은 확인만 하는 모드입니다. 아래 링크로 직접 예약하세요.',
+      resumeUrl: slot.bookUrl,
+    });
+  }
+
+  if (matched === 0) say('\n신청한 날짜·회차에는 아직 자리가 없습니다.');
 }
 
 main()
