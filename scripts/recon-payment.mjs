@@ -130,42 +130,59 @@ async function main() {
     const shellHtml = await shell.text();
     writeFileSync(`${OUT}/booking-shell.html`, shellHtml);
 
-    const srcs = [...shellHtml.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((m) => m[1]);
-    log(`번들 후보 ${srcs.length}개: ${srcs.map((s) => `\`${s}\``).join(', ') || '(없음)'}`);
+    // 먼저 페이지 자신의 인라인 스크립트를 본다. 2차 프로브가 외부 번들만 뒤졌는데,
+    // 이 사이트가 외부로 내보내는 것은 공통 유틸과 NetFunnel SDK뿐이었다.
+    // 예약 흐름을 굴리는 `booking` 객체는 페이지에 인라인으로 박혀 있다 —
+    // 조각들이 `booking.selPayment(seq)`를 부르는데 조각 어디에도 정의가 없었으니,
+    // 남는 자리는 부모 페이지밖에 없다.
+    const inline = scripts(shellHtml).join('\n');
+    log(`인라인 스크립트 ${inline.length}자, 외부 스크립트 후보 확인 중\n`);
+    writeFileSync(`${OUT}/booking-inline.js`, inline);
 
+    const sources = [['(페이지 인라인)', inline]];
+
+    const srcs = [...shellHtml.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((m) => m[1]);
+    log(`외부 스크립트 ${srcs.length}개: ${srcs.map((x) => `\`${x}\``).join(', ') || '(없음)'}`);
     for (const src of srcs) {
       const url = src.startsWith('http') ? src : `${ORIGIN}/${src.replace(/^\//, '')}`;
-      if (!url.startsWith(ORIGIN)) continue; // 외부 스크립트는 우리 관심사가 아니다
-      let code = '';
+      if (!url.startsWith(ORIGIN)) continue;
+      if (/netfunnel|skin/i.test(url)) { log(`- ${url} 건너뜀 (NetFunnel SDK — 우리 계약이 아니다)`); continue; }
       try {
         const r = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-        code = await r.text();
+        sources.push([url, await r.text()]);
       } catch (e) {
         log(`- ${url} 실패: ${e.message}`);
-        continue;
       }
-      log(`\n### ${url} — ${code.length}자`);
-      writeFileSync(`${OUT}/bundle-${url.split('/').pop()}`, code);
+    }
+
+    for (const [name, code] of sources) {
+      log(`\n### ${name} — ${code.length}자`);
 
       // 예약 흐름 경로가 나오는 자리를 앞뒤 맥락과 함께 보여준다.
-      // 압축된 코드는 줄바꿈이 없으므로 문자 단위로 잘라야 읽을 수 있다.
-      const hits = [];
+      const seen = new Map();
       for (const m of code.matchAll(/["'](\/(?:booking|programs)\/[a-zA-Z]+)["']/g)) {
         const at = m.index ?? 0;
-        hits.push({ path: m[1], ctx: code.slice(Math.max(0, at - 420), at + 420) });
+        if (!seen.has(m[1])) seen.set(m[1], code.slice(Math.max(0, at - 500), at + 700));
       }
-      const byPath = new Map();
-      for (const h of hits) if (!byPath.has(h.path)) byPath.set(h.path, h.ctx);
-      for (const [path, ctx] of byPath) {
+      if (seen.size === 0) log('- 예약 경로 리터럴 없음');
+      for (const [path, ctx] of seen) {
         log(`\n**\`${path}\`**`);
         log('```js\n' + ctx.replace(/`/g, "'") + '\n```');
       }
 
-      for (const kw of ['spectatorNm', 'seqExhibitionReserve', 'NetFunnel', 'reserveComplete']) {
+      // 이름으로 흐름 함수를 통째로 꺼낸다. 압축돼 있어도 중괄호는 셀 수 있다.
+      for (const name2 of ['selPayment', 'selTime', 'reserve = function', 'fn_reserve', 'insertReserve']) {
+        const body = functionBody(code, name2);
+        if (!body) continue;
+        log(`\n**\`${name2}\` 정의**`);
+        log('```js\n' + body.slice(0, 2200).replace(/`/g, "'") + '\n```');
+      }
+
+      for (const kw of ['spectatorNm', 'spectatorEmail', 'seqExhibitionReserve', 'btn_reserve', 'netfunnelId']) {
         const at = code.indexOf(kw);
         if (at === -1) continue;
         log(`\n**\`${kw}\` 주변**`);
-        log('```js\n' + code.slice(Math.max(0, at - 500), at + 500).replace(/`/g, "'") + '\n```');
+        log('```js\n' + code.slice(Math.max(0, at - 600), at + 800).replace(/`/g, "'") + '\n```');
       }
     }
   } catch (e) {
