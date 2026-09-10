@@ -19,10 +19,10 @@ on:
     branches: [watch-run]
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: '실제 예약 없이 확인만 (권장)'
+      confirm_live_booking:
+        description: '⚠️ 실제로 예약합니다 (체크하지 않으면 확인만 합니다)'
         type: boolean
-        default: true
+        default: false
 
 concurrency:
   # 이전 실행이 끝나기 전에 다음 실행이 겹치면 중복 예약 위험이 생긴다.
@@ -69,8 +69,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          # 기본은 확인만. 실제 예약은 명시적으로 켤 때만 동작한다.
-          DRY_RUN: ${{ inputs.dry_run == false && 'false' || 'true' }}
+          # 위험한 쪽(실제 예약)은 **명시적으로 참일 때만** 선택되게 한다.
+          #
+          # 이전 표현식은 `inputs.dry_run == false`였는데, push로 실행되면
+          # inputs가 비어 있고 GitHub 표현식에서 null == false 가 참이 되어
+          # 실제 예약 모드로 켜졌다. 첫 시험 운전이 실제로 그렇게 돌았다.
+          # 없는 값·모르는 값은 전부 안전한 쪽으로 떨어져야 한다.
+          DRY_RUN: ${{ inputs.confirm_live_booking == true && 'false' || 'true' }}
           APPLICANT_NAME: ${{ secrets.APPLICANT_NAME }}
           APPLICANT_EMAIL: ${{ secrets.APPLICANT_EMAIL }}
         run: npx tsx src/watch-once.ts
