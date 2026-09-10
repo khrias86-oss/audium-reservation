@@ -23,7 +23,7 @@ const BOOKING_URL = `${BASE}/booking`;
 const OUT = 'recon-output';
 mkdirSync(OUT, { recursive: true });
 
-const DANGEROUS_TEXT = /예약하기|예약신청|신청하기|제출|결제|확인|다음|완료|로그인|가입|취소하기/;
+const DANGEROUS_TEXT = /예약하기|예약신청|신청하기|제출|결제|확인|다음|완료|로그인|가입|취소하기|submit|confirm|pay|complete|login|sign\\s*up|checkout/i;
 const DATE_LIKE = /^\s*(0?[1-9]|[12]\d|3[01])\s*$/;
 
 const report = [];
@@ -134,12 +134,16 @@ async function main() {
   // 후보 경로를 모두 열어보고 어디에 실물이 있는지 확인한다.
   log('\n## 단계 2~3 — 후보 경로 탐색\n');
 
-  const CANDIDATE_PATHS = ['/booking', '/programs/booking', '/booking/exhbition'];
+  // 2차 정찰에서 /booking이 "티켓 종류 선택" 페이지임이 확인됐다.
+  // EXHIBITIONS / LECTURE 두 항목이 있고, 하위 페이지에 직접 들어가면 본문이
+  // 33~46자에 제목도 비어 있었다 — 필요한 파라미터 없이 들어가서 캘린더가
+  // 렌더되지 않은 것으로 보인다. 그래서 실제 사용자 흐름대로 링크를 추출해 따라간다.
+  const START = `${BASE}/booking`;
 
   const browser = await chromium.launch();
   const context = await browser.newContext({
     userAgent: 'Mozilla/5.0 (compatible; personal-use-recon)',
-    viewport: { width: 1280, height: 2000 },
+    viewport: { width: 1280, height: 2400 },
   });
   const page = await context.newPage();
 
@@ -156,53 +160,80 @@ async function main() {
       try {
         const ct = res.headers()['content-type'] ?? '';
         if (ct.includes('json')) body = (await res.text()).slice(0, 6000);
-      } catch { /* 본문을 못 읽어도 나머지 정보는 유효하다 */ }
+      } catch { /* 본문을 못 읽어도 나머지는 유효하다 */ }
       const entry = { phase: currentPhase, t: 'res', type, url: res.url(), status: res.status(), body };
       networkLog.push(entry);
       appendFileSync(netStream, JSON.stringify(entry) + '\n');
     }
   });
 
-  const pageReports = [];
-
-  for (const path of CANDIDATE_PATHS) {
-    currentPhase = path;
-    const target = `${BASE}${path}`;
-    log(`\n### ${target}`);
-
-    try {
-      const response = await page.goto(target, { waitUntil: 'networkidle', timeout: 40_000 });
-      log(`- HTTP ${response?.status() ?? '(응답 없음)'}`);
-    } catch (e) {
-      log(`- 로드 실패: ${e.message}`);
-      continue;
-    }
-
-    const finalUrl = page.url();
-    log(`- 최종 URL(리다이렉트 반영): ${finalUrl}`);
-    log(`- 제목: ${await page.title().catch(() => '(없음)')}`);
-
-    // iframe 안에 예약 위젯이 들어 있는 경우가 흔하다. 반드시 확인한다.
+  // 렌더가 늦게 끝나는 페이지를 놓치지 않도록, 로드 후 한 번 더 기다렸다가 읽는다.
+  // networkidle은 네트워크만 보므로 클라이언트 렌더가 진행 중이어도 즉시 발생한다.
+  async function inspect(label) {
+    await page.waitForTimeout(3_000);
+    const url = page.url();
+    const title = await page.title().catch(() => '');
+    const text = await page.evaluate(() => document.body?.innerText ?? '').catch(() => '');
+    const html = await page.content().catch(() => '');
     const frames = page.frames().filter((f) => f !== page.mainFrame());
+
+    log(`\n### ${label}`);
+    log(`- URL: ${url}`);
+    log(`- 제목: ${title || '(없음)'}`);
+    log(`- 본문 텍스트 ${text.length}자 / HTML ${html.length}자`);
     log(`- iframe ${frames.length}개${frames.length ? ': ' + frames.map((f) => f.url()).join(', ') : ''}`);
 
-    const text = await page.evaluate(() => document.body?.innerText ?? '').catch(() => '');
-    log(`- 본문 텍스트 길이: ${text.length}자`);
+    // 텍스트는 짧은데 HTML이 크면, DOM에는 있지만 화면에 안 보이는 상태다.
+    if (html.length > 20_000 && text.length < 200) {
+      log('- ⚠️ HTML은 큰데 보이는 텍스트가 적다 → 탭/아코디언에 숨겨졌거나 렌더 미완료');
+    }
+
     if (text.length > 0) {
       log('```');
-      log(text.slice(0, 2500).replace(/\n{3,}/g, '\n\n'));
+      log(text.slice(0, 2000).replace(/\n{3,}/g, '\n\n'));
       log('```');
     }
 
-    const html = await page.content().catch(() => '');
-    writeFileSync(`${OUT}/page${path.replace(/\//g, '_')}.html`, html);
-    await page.screenshot({ path: `${OUT}/page${path.replace(/\//g, '_')}.png`, fullPage: true }).catch(() => {});
-
-    pageReports.push({ path, finalUrl, textLength: text.length, text, html });
+    const slug = label.replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 40);
+    writeFileSync(`${OUT}/${slug}.html`, html);
+    await page.screenshot({ path: `${OUT}/${slug}.png`, fullPage: true }).catch(() => {});
+    return { url, title, text, html };
   }
 
-  // 가장 내용이 많은 페이지에서만 상호작용을 시도한다. 빈 껍데기를 클릭해봐야 의미가 없다.
-  const richest = pageReports.sort((a, b) => b.textLength - a.textLength)[0];
+  currentPhase = 'booking';
+  log('\n## 단계 2 — 시작 페이지\n');
+  await page.goto(START, { waitUntil: 'networkidle', timeout: 40_000 }).catch((e) => log(`로드 실패: ${e.message}`));
+  await inspect('booking (시작)');
+
+  // 링크 전수 조사 — 티켓 종류가 실제로 어디를 가리키는지가 여기서 드러난다.
+  log('\n## 페이지 내 링크 전수 조사\n');
+  const links = await page.$$eval('a[href]', (as) =>
+    as.map((a) => ({ text: (a.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 60), href: a.href })),
+  ).catch(() => []);
+
+  const seen = new Set();
+  const unique = links.filter((l) => !seen.has(l.href) && seen.add(l.href));
+  log(`총 ${unique.length}개:`);
+  for (const l of unique) log(`- [${l.text || '(텍스트 없음)'}] → ${l.href}`);
+
+  // 예약 흐름으로 이어질 만한 링크만 추린다.
+  const BOOKING_HINT = /book|reserv|ticket|program|exhb|exhib|lecture|visit/i;
+  const promising = unique.filter((l) => BOOKING_HINT.test(l.href) && !/^mailto:|^tel:/.test(l.href));
+  log(`\n예약 흐름 후보 ${promising.length}개`);
+
+  const pageReports = [];
+  for (const link of promising.slice(0, 6)) {
+    currentPhase = link.href;
+    try {
+      await page.goto(link.href, { waitUntil: 'networkidle', timeout: 40_000 });
+      const r = await inspect(`${link.text || '링크'} → ${link.href.replace(BASE, '')}`);
+      pageReports.push({ ...r, textLength: r.text.length });
+    } catch (e) {
+      log(`\n### ${link.href}\n- 로드 실패: ${e.message.split('\n')[0]}`);
+    }
+  }
+
+  // 내용이 가장 많은 페이지에서만 상호작용한다. 빈 껍데기를 클릭해봐야 의미가 없다.\n  const richest = pageReports.sort((a, b) => b.textLength - a.textLength)[0];
 
   if (richest && richest.textLength > 0) {
     log(`\n## 상호작용 대상: ${richest.finalUrl} (본문 ${richest.textLength}자)\n`);
