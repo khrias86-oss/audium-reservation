@@ -126,7 +126,15 @@ async function main() {
   page.on('pageerror', (e) => consoleErrors.push(e.message.slice(0, 200)));
   page.on('request', (r) => {
     if (['xhr', 'fetch', 'document'].includes(r.resourceType())) {
-      networkLog.push({ t: 'req', method: r.method(), url: r.url() });
+      networkLog.push({
+        t: 'req',
+        method: r.method(),
+        url: r.url(),
+        // 브라우저를 걷어내고 HTTP 요청만으로 확인하려면 요청 본문이 필요하다.
+        // 지금은 확인 1회에 44초가 드는데, 대부분이 브라우저 설치와 렌더링이다.
+        postData: r.postData(),
+        headers: r.headers(),
+      });
     }
   });
   page.on('response', async (r) => {
@@ -345,6 +353,19 @@ async function main() {
 
   const pageResponses = networkLog.filter((n) => n.t === 'res' && n.body && !FLOW_STEP.test(n.url));
   log(`\n(페이지 로드 응답 ${pageResponses.length}건은 아티팩트에만 남깁니다)\n`);
+
+  // 예약 흐름 단계의 요청 파라미터 — 브라우저 없이 재현하려면 이것이 계약이다
+  const flowRequests = networkLog.filter(
+    (n) => n.t === 'req' && FLOW_STEP.test(n.url) && n.url.includes('audeum.org'),
+  );
+  log(`\n### 예약 흐름 요청 ${flowRequests.length}건 — 브라우저 제거용\n`);
+  for (const r of flowRequests) {
+    log(`\n#### ${r.method} ${r.url}`);
+    log(`- content-type: \`${r.headers?.['content-type'] ?? '(없음)'}\``);
+    log(`- 쿠키 전송: ${r.headers?.['cookie'] ? '있음' : '없음'}`);
+    log(`- referer: \`${r.headers?.['referer'] ?? '(없음)'}\``);
+    log(r.postData ? `- **본문:** \`${r.postData.slice(0, 1000)}\`` : '- 본문 없음 (GET)');
+  }
 
   const endpoints = [...new Set(networkLog.filter((n) => n.t === 'req' && n.url.includes('audeum.org')).map((n) => n.url.split('?')[0]))];
   log(`\n오디움 엔드포인트 ${endpoints.length}개:`);
