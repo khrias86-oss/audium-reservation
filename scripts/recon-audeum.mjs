@@ -327,14 +327,24 @@ async function main() {
 
   // ─── 요약 ─────────────────────────────────────────────────────────────
   log('\n## 요약\n');
-  const audeumJson = networkLog.filter((n) => n.t === 'res' && n.body && n.url.includes('audeum.org'));
-  log(`오디움 자체 JSON 응답: ${audeumJson.length}건`);
-  for (const r of audeumJson.slice(0, 4)) {
-    log(`\n### ${r.status} ${r.url}`);
-    log('```json');
-    log(r.body.slice(0, 2500));
+  // 9차에서 요약이 페이지 로드 응답부터 찍는 바람에 정작 계약인 date/time 조각이
+  // 로그 밖으로 밀렸다. 플로우 조각을 먼저, 그리고 전문에 가깝게 찍는다.
+  const FLOW_STEP = /\/(age|date|time)(\?|$)/;
+  const flowResponses = networkLog.filter((n) => n.t === 'res' && n.body && FLOW_STEP.test(n.url));
+
+  log(`### 예약 플로우 조각 ${flowResponses.length}건 — **이것이 계약이다**\n`);
+  if (flowResponses.length === 0) {
+    log('플로우 조각을 하나도 잡지 못했습니다. 클릭이 동작하지 않았을 수 있습니다.');
+  }
+  for (const r of flowResponses) {
+    log(`\n#### ${r.status} ${r.url}`);
+    log('```html');
+    log(r.body.replace(/\s{2,}/g, ' ').slice(0, 7000));
     log('```');
   }
+
+  const pageResponses = networkLog.filter((n) => n.t === 'res' && n.body && !FLOW_STEP.test(n.url));
+  log(`\n(페이지 로드 응답 ${pageResponses.length}건은 아티팩트에만 남깁니다)\n`);
 
   const endpoints = [...new Set(networkLog.filter((n) => n.t === 'req' && n.url.includes('audeum.org')).map((n) => n.url.split('?')[0]))];
   log(`\n오디움 엔드포인트 ${endpoints.length}개:`);
