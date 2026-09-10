@@ -1,0 +1,59 @@
+name: 📄 감시 신청 페이지 배포
+
+# `docs-site/index.html` 을 GitHub Pages로 올린다.
+#
+# ## 왜 "브랜치에서 배포"가 아니라 Actions인가
+#
+# 브랜치 배포는 루트나 `/docs` 두 곳만 고를 수 있다. 이 저장소의 `docs/` 는 이미
+# 설계 문서가 쓰고 있고, 페이지는 `docs-site/` 에 있다. 문서를 옮기거나 섞는 대신
+# Actions로 올리면 폴더 제약이 없다.
+#
+# 부수 효과로 Pages 활성화까지 자동으로 된다 (`enablement: true`). 저장소 설정을
+# 사람이 건드릴 필요가 없다.
+on:
+  push:
+    branches: [main]
+    paths: ['docs-site/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+# Pages 배포에 필요한 최소 권한.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포는 겹치면 안 되지만, 새 배포가 있으면 진행 중인 것은 버려도 된다.
+# 마지막 것만 살아남으면 되는 종류의 작업이다.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pages 설정 (없으면 켠다)
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: 페이지 올리기
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-site
+
+      - name: 배포
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: 주소 알리기
+        run: |
+          echo "### 감시 신청 페이지" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.deploy.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"
