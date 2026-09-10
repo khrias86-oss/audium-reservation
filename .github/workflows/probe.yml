@@ -1,0 +1,55 @@
+name: 🔍 결제 단계 계약 정찰 (HTTP 전용)
+
+# 브라우저를 쓰지 않으므로 크로미움 설치가 없다. 실행이 20초 안에 끝난다.
+#
+# 스케줄은 걸지 않는다. `probe-run` 브랜치에 푸시할 때만 돈다.
+# (workflow_dispatch는 워크플로가 기본 브랜치에 있어야 동작한다.)
+on:
+  push:
+    branches: [probe-run]
+  workflow_dispatch:
+    inputs:
+      probe_payment_form:
+        description: '결제 화면 조각까지 읽습니다 (예약은 제출하지 않습니다)'
+        type: boolean
+        default: false
+      reserve_seq:
+        description: '결제 화면을 읽을 회차의 seq_reserve 값'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 정찰 실행
+        env:
+          # 위험한 쪽은 명시적으로 참일 때만 켜진다. 값이 없거나 모르는 값이면
+          # 전부 꺼진 쪽으로 떨어진다.
+          PROBE_PAYMENT_FORM: ${{ inputs.probe_payment_form == true && '1' || '0' }}
+          PROBE_RESERVE_SEQ: ${{ inputs.reserve_seq }}
+        run: node scripts/recon-payment.mjs
+
+      - name: 리포트를 로그와 서머리에 출력
+        if: always()
+        run: |
+          echo "=============== REPORT START ==============="
+          cat recon-output/RECON_REPORT.md || echo "리포트 없음"
+          echo "=============== REPORT END ================="
+          cat recon-output/RECON_REPORT.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: probe-output
+          path: recon-output/
+          retention-days: 14
