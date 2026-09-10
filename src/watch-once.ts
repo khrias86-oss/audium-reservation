@@ -8,7 +8,7 @@
  *
  * 실제 예약은 `DRY_RUN=false`가 명시적으로 설정될 때만 한다. 기본값은 확인만이다.
  */
-import { fetchSlotsForDates } from './adapters/audeum/http-flow.js';
+import { fetchOpenDates, fetchSlotsForDates } from './adapters/audeum/http-flow.js';
 import { prepareBooking } from './booking/prepare.js';
 import { parseWatchRequests } from './config/watch-requests.js';
 import { createGitHubIssueNotifier } from './notify/github-issue.js';
@@ -67,7 +67,34 @@ async function main(): Promise<void> {
 
   // 사이트가 주는 날짜를 전부 훑지 않고, **신청한 날짜만** 물어본다.
   // 요청 수가 감시 항목 수에 비례해 늘어나지, 사이트 사정에 좌우되지 않는다.
-  const dates = [...new Set(requests.map((r) => r.date))];
+  let dates = [...new Set(requests.map((r) => r.date))];
+
+  // 그 중에서도 **예약이 열린 날짜만** 남긴다. 예약은 격주로 열리므로 달력상
+  // 목·금·토라도 아직 안 열린 날이 대부분이고, 그런 날의 회차를 묻는 것은
+  // 매번 헛도는 요청이다. 사이트가 열린 날짜를 직접 알려주므로 어림할 필요가 없다.
+  const open = await fetchOpenDates('exhibition');
+  if (open.kind === 'OK') {
+    const openSet = new Set(open.dates.map((d) => d.date));
+    const closed = dates.filter((d) => !openSet.has(d));
+    dates = dates.filter((d) => openSet.has(d));
+
+    say(`\n사이트가 연 날짜: ${open.dates.map((d) => d.date).join(', ') || '없음'}`);
+    for (const d of closed) {
+      // "자리 없음"이 아니다. 아직 예약이 시작되지 않았다는 뜻이고, 사용자가
+      // 이 둘을 구분하지 못하면 잘못된 날짜를 계속 걸어둔 채 기다리게 된다.
+      say(`- ⏳ ${d}: 아직 예약이 열리지 않았습니다 (전시 예약은 격주 화요일 14시 오픈)`);
+    }
+  } else {
+    // 날짜 목록을 못 받았다고 감시를 멈추지는 않는다. 걸러내기는 최적화일 뿐이고,
+    // 최적화가 실패했다고 본래 일까지 못 하게 되면 안 된다.
+    const why = open.kind === 'QUEUED' ? open.message : open.reason;
+    say(`\n열린 날짜 목록을 못 받아 신청한 날짜를 그대로 확인합니다 (${why})`);
+  }
+
+  if (dates.length === 0) {
+    say('\n확인할 날짜가 없습니다.');
+    return;
+  }
   const { result, perDate, elapsedMs } = await fetchSlotsForDates(dates, 'exhibition');
   say(`요청 ${dates.length}건 / ${(elapsedMs / 1000).toFixed(1)}초`);
 
@@ -141,10 +168,11 @@ async function main(): Promise<void> {
         date: request.date, time: request.time, priority: request.priority, state: 'DETECTED',
       },
       slot,
-      reason: liveBooking
-        ? '자동 예약을 시도합니다.'
-        : '지금은 확인만 하는 모드입니다. 아래 링크로 직접 예약하세요.',
+      reason: prepared.kind === 'UNVERIFIED'
+        ? `여석을 봤지만 재확인은 하지 못했습니다: ${prepared.reason}`
+        : '방금 다시 확인했고, 자리가 남아 있습니다.',
       resumeUrl: slot.bookUrl,
+      reserveSeq: seq || null,
     });
   }
 

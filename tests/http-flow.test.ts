@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   buildTimeRequestBody,
+  fetchOpenDates,
   fetchSlotsForDate,
   fetchSlotsForDates,
 } from '../src/adapters/audeum/http-flow.js';
@@ -159,5 +160,47 @@ describe('여러 날짜 조회', () => {
     });
     // 순차라면 300ms 이상이다. 병렬이면 가장 느린 요청 하나에 수렴한다.
     expect(elapsedMs).toBeLessThan(200);
+  });
+});
+
+describe('예약이 열린 날짜 조회', () => {
+  it('사이트가 쓰는 폼으로 /booking/date를 물어본다', async () => {
+    let seen: { url: string; init: RequestInit } | null = null;
+    await fetchOpenDates('exhibition', {
+      fetchImpl: stubFetch((url, init) => {
+        seen = { url, init };
+        return ok('<script>reserveList = [{"SPECTATE_DATE":"2026-09-10"}];</script>');
+      }),
+    });
+    const call = seen as unknown as { url: string; init: RequestInit };
+    expect(call.url).toBe('https://audeum.org/booking/date');
+    expect(call.init.body).toBe('locale=ko&seqExhibition=1&language=ko');
+  });
+
+  it('열린 날짜를 그대로 돌려준다', async () => {
+    const r = await fetchOpenDates('exhibition', {
+      fetchImpl: stubFetch(() =>
+        ok('<script>reserveList = [{"SPECTATE_DATE":"2026-09-10","RESERVE_OPEN_DATETIME":"2026-09-08T14:00:00"}];</script>'),
+      ),
+    });
+    expect(r.kind).toBe('OK');
+    if (r.kind !== 'OK') return;
+    expect(r.dates).toEqual([{ date: '2026-09-10', opensAt: '2026-09-08T14:00:00' }]);
+  });
+
+  it('요청이 실패해도 예외를 던지지 않는다 — 걸러내기는 최적화일 뿐이다', async () => {
+    const r = await fetchOpenDates('exhibition', {
+      fetchImpl: stubFetch(() => { throw new Error('ECONNRESET'); }),
+    });
+    expect(r.kind).toBe('CONTRACT_BROKEN');
+  });
+
+  it('4xx·5xx도 예외 없이 사유와 함께 돌려준다', async () => {
+    const r = await fetchOpenDates('exhibition', {
+      fetchImpl: stubFetch(() => new Response('', { status: 500 })),
+    });
+    expect(r.kind).toBe('CONTRACT_BROKEN');
+    if (r.kind !== 'CONTRACT_BROKEN') return;
+    expect(r.reason).toContain('500');
   });
 });

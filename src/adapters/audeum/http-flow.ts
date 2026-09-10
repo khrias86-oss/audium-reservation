@@ -8,6 +8,7 @@ import {
   isQueuePage,
 } from './contract.js';
 import { parseTimeFragment } from './parse-time-fragment.js';
+import { parseDateFragment, type DateFragmentResult } from './parse-date-fragment.js';
 
 /**
  * 브라우저 없이 회차 정보를 가져온다.
@@ -38,6 +39,50 @@ export interface HttpFlowOptions {
 }
 
 const DEFAULT_TIMEOUT_MS = 8_000;
+
+/**
+ * 예약이 열린 날짜를 사이트에 물어본다.
+ *
+ * "목·금·토"라는 규칙으로 어림하는 대신 사이트가 실제로 여는 날짜를 받는다.
+ * 예약이 격주로 열리므로 달력상 목·금·토라도 아직 안 열린 날이 대부분이고,
+ * 그런 날짜의 회차를 물어보는 것은 매번 헛도는 요청이다.
+ *
+ * 요청 한 건 값으로 "그 날은 아직 예약이 열리지 않았습니다"를 정확히 말해 줄 수
+ * 있게 된다 — "자리 없음"과는 전혀 다른 말이고, 사용자에게도 그렇다.
+ */
+export async function fetchOpenDates(
+  product: Product = 'exhibition',
+  options: HttpFlowOptions = {},
+): Promise<DateFragmentResult> {
+  const doFetch = options.fetchImpl ?? fetch;
+  const flow = product === 'exhibition' ? FLOW.exhibition : FLOW.lecture;
+  const params = new URLSearchParams();
+  params.set(REQUEST_FIELDS.locale, 'ko');
+  params.set(
+    product === 'exhibition' ? REQUEST_FIELDS.seqExhibition : REQUEST_FIELDS.seqProgram,
+    PRODUCT_SEQ[product],
+  );
+  params.set(REQUEST_FIELDS.language, 'ko');
+
+  try {
+    const res = await doFetch(`${ORIGIN}${flow.date}`, {
+      method: 'POST',
+      headers: { ...REQUEST_HEADERS },
+      body: params.toString(),
+      signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      // 못 물어봤다고 감시를 멈추면 안 된다. 호출부가 날짜 전부를 확인하도록 둔다.
+      return { kind: 'CONTRACT_BROKEN', reason: `날짜 목록 요청이 ${res.status}로 실패했습니다` };
+    }
+    return parseDateFragment(await res.text());
+  } catch (error) {
+    return {
+      kind: 'CONTRACT_BROKEN',
+      reason: `날짜 목록을 받지 못했습니다: ${describe(error)}`,
+    };
+  }
+}
 
 /** 사이트가 쓰는 폼 본문을 그대로 만든다. */
 export function buildTimeRequestBody(date: string, product: Product): string {

@@ -1,0 +1,25 @@
+<html xmlns="http://www.w3.org/1999/xhtml">
+<div class="clr-col-12 clr-col-lg-6 select-date-container">
+  <span class="title">날짜 선택하기</span>
+  <div class="calendar-container ng-star-inserted"><div id='datepicker_reserve'></div></div>
+</div>
+<div class="clr-col-12 clr-col-lg-6 select-slot-wrapper">
+  <span class="title">시간 선택하기</span>
+  <div class="clr-row btn-group time-slot-container ng-star-inserted"></div>
+</div>
+<script>
+	var bookingDate = {
+			dayNamesMin :  [ "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" ]
+			,showMonthAfterYear : false
+			,
+	};
+
+	//선택 가능 날짜.
+	bookingDate.availableDates = [];
+	bookingDate.reserveList = [{"SPECTATE_DATE":"2026-09-10","RESERVE_OPEN_DATETIME":"2026-09-08T14:00:00"},{"SPECTATE_DATE":"2026-09-11","RESERVE_OPEN_DATETIME":"2026-09-08T14:00:00"},{"SPECTATE_DATE":"2026-09-12","RESERVE_OPEN_DATETIME":"2026-09-08T14:00:00"},{"SPECTATE_DATE":"2026-09-17","RESERVE_OPEN_DATETIME":"2026-09-08T14:00:00"},{"SPECTATE_DATE":"2026-09-18","RESERVE_OPEN_DATETIME":"2026-09-08T14:00:00"},{"SPECTATE_DATE":"2026-09-19","RESERVE_OPEN_DATETIME":"2026-09-08T14:00:00"}];
+
+	for(var i=0; i<bookingDate.reserveList.length; i++){
+		bookingDate.availableDates.push(bookingDate.reserveList[i].SPECTATE_DATE);
+	}
+</script>
+</html>

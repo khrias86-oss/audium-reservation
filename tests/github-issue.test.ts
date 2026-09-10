@@ -106,7 +106,30 @@ describe('알림 본문', () => {
     // 모바일에서 알림을 열자마자 탭할 수 있어야 한다.
     const body = await captureBody(needsAction);
     expect(body.body.split('\n')[0]).toContain('https://audeum.org/booking');
-    expect(body.title).toContain('[조치필요]');
+  });
+
+  it('제목만 봐도 무엇을 잡았는지 알 수 있다', async () => {
+    // 폰 잠금화면에서는 제목이 거의 전부다. 분류 딱지보다 날짜·회차가 먼저다.
+    const body = await captureBody(needsAction);
+    expect(body.title).toContain(needsAction.slot.date);
+    expect(body.title).toContain(needsAction.slot.time);
+  });
+
+  it('사람이 눌러야 하는 관문을 순서대로 알려준다', async () => {
+    // 오디움은 마지막에 휴대폰 인증번호와 Turnstile을 요구한다. 자동으로 통과할
+    // 수 없으므로, 최소한 화면에서 헤매지는 않게 해야 한다.
+    const body = await captureBody(needsAction);
+    expect(body.body).toContain('인증번호 발송');
+    expect(body.body).toContain('사람인지 확인');
+    expect(body.body).toContain(needsAction.slot.time);
+  });
+
+  it('회차 식별자가 있으면 적고, 없으면 지어내지 않는다', async () => {
+    const withSeq = await captureBody({ ...needsAction, reserveSeq: '2048' });
+    expect(withSeq.body).toContain('2048');
+    // 순서표에도 "회차"라는 말이 나오므로, 식별자를 감싼 코드 표기로 확인한다.
+    const without = await captureBody({ ...needsAction, reserveSeq: null });
+    expect(without.body).not.toMatch(/`회차 \d+`/);
   });
 
   it('확인번호가 없으면 지어내지 않는다', async () => {
