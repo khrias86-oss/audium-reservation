@@ -95,6 +95,42 @@ export const ITEM_CLICK_COOLDOWN_MS = 3_000;
 export const SOLD_OUT_MESSAGE = '예약가능한 시간이 아닙니다';
 
 /**
+ * 회차 조각의 셀렉터 — **10차 정찰에서 실제 응답으로 확인**했다.
+ *
+ * 매진 판별의 근거는 사이트 자신의 클릭 핸들러다:
+ * `if($(this).hasClass("disabled-time-slots")) return;`
+ * 이 클래스가 붙으면 사이트가 클릭을 거부한다. 우리 판별이 사이트 규칙과 같다.
+ */
+export const TIME_SLOT = {
+  /** 회차 하나 */
+  container: '.time-slots',
+  /** 이 클래스가 있으면 매진 */
+  soldOutClass: 'disabled-time-slots',
+  /** 숨겨진 값들 */
+  date: 'spectate_date',
+  time: 'spectate_time',
+  /** 예약 제출에 쓰이는 식별자 */
+  reserveSeq: 'seq_reserve',
+} as const;
+
+/**
+ * 사이트가 공지한 운영 규칙 — 10차 정찰에서 `/booking/date` 응답으로 확인.
+ *
+ * 감시 주기를 설계할 때 이 규칙이 중요하다. 예약이 격주로 열리므로
+ * 상시 폴링은 대부분의 시간을 낭비하게 된다.
+ */
+export const SITE_POLICY = {
+  /** 전시 예약은 격주 화요일 14시(KST)에 오픈된다 */
+  openingRule: '격주 화요일 오후 2시(KST)',
+  /** 1일 1인 1매(1회차). 대리 예매·양도 불가, 본인 이름 예약, 실물 신분증 지참 */
+  oneTicketPerPersonPerDay: true,
+  /** 도슨트 투어 약 110분, 개별 관람 불가 */
+  docentTourMinutes: 110,
+  /** 관람 연령: 2013년 이전 출생자(2013년생 포함) 및 중학생 이상 */
+  minimumBirthYear: 2013,
+} as const;
+
+/**
  * 예약자 입력 필드. 지금까지 확인된 것은 이름과 이메일뿐이다.
  * `btn_reserve`는 제출 버튼이므로 **자동화가 클릭해서는 안 된다**
  * (`DRY_RUN=false`가 명시된 M6 이후에만).
@@ -139,9 +175,9 @@ export const CONTRACT: AudeumContract = {
   // 확인됨 (8차): 매진은 회차 선택 시점에 이 메시지로 드러난다.
   soldOutSignal: SOLD_OUT_MESSAGE,
 
-  // 미확인: 대기열 통과 비용을 아직 측정하지 못했다. 6·8차는 1회 만에 통과했지만
-  // 혼잡 시간대 표본이 없어 폴링 예산을 정할 근거로는 부족하다.
-  queueRetriesNeeded: null,
+  // 확인됨 (6·8·9·10차): 모두 1회 만에 통과했다. 다만 전부 한산한 시간대였으므로,
+  // 예약 오픈 시각(격주 화요일 14시)에는 다를 것으로 보고 재시도를 유지한다.
+  queueRetriesNeeded: 1,
 };
 
 /** 계약이 채워지기 전에 어댑터가 실행되는 것을 막는다. */

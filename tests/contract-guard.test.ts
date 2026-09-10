@@ -14,17 +14,8 @@ const filled: AudeumContract = {
 };
 
 describe('계약 준비 가드', () => {
-  it('정찰 전에는 어댑터 실행을 거부한다', () => {
-    // M1이 끝나기 전에 추측한 셀렉터로 예약을 제출하는 것이 최악의 시나리오다.
-    expect(() => assertContractReady(CONTRACT)).toThrow(/계약이 아직 확정되지 않았습니다/);
-  });
-
-  it('미확인 항목을 이름으로 알려준다', () => {
-    // 8차 정찰로 대부분이 확정됐고, 지금 남은 것은 대기열 통과 비용뿐이다.
-    expect(() => assertContractReady(CONTRACT)).toThrow(/queueRetriesNeeded/);
-  });
-
   it('일부만 채워져도 거부한다', () => {
+    // 추측한 셀렉터로 예약을 제출하는 것이 최악의 시나리오다.
     expect(() => assertContractReady({ ...filled, submitEndpoint: null })).toThrow(/submitEndpoint/);
   });
 
@@ -32,9 +23,9 @@ describe('계약 준비 가드', () => {
     expect(() => assertContractReady(filled)).not.toThrow();
   });
 
-  it('대기열 통과 비용은 아직 미확정이다 — M1이 끝나지 않았음을 고정한다', () => {
-    // 6·8차는 1회 만에 통과했지만 혼잡 시간대 표본이 없어 폴링 예산의 근거로는 부족하다.
-    expect(CONTRACT.queueRetriesNeeded).toBeNull();
+  it('계약이 확정되어 어댑터 실행이 허용된다 — M1 완료', () => {
+    // 10차 정찰에서 회차 조각의 실물을 확보해 마지막 항목까지 채웠다.
+    expect(() => assertContractReady(CONTRACT)).not.toThrow();
   });
 
   it('실측으로 확인된 항목은 이미 채워져 있다', () => {

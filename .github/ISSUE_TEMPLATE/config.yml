@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📊 현재 감시 상태 보기
+    url: https://github.com/khrias86-oss/audium-reservation/actions
+    about: 최근 확인 시각과 결과를 볼 수 있습니다.
+  - name: 🏛️ 오디움 예약 페이지 직접 열기
+    url: https://audeum.org/booking
+    about: 직접 예약하시려면 여기로.
