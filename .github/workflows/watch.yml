@@ -41,11 +41,6 @@ on:
     # 화~토 2시간마다. 정각을 피해 7분에 둔다 — GitHub 문서가 매시 정각을
     # 고부하 시간대로 지목한다.
     - cron: '7 0,2,4,6,8,10,12,14,16,18,20,22 * * 2-6'
-  # watch-run 브랜치 푸시는 시험 실행용이다. workflow_dispatch는 워크플로가 기본
-  # 브랜치에 있어야만 동작하는데, 이 워크플로는 아직 병합 전이라 쓸 수 없다.
-  # 병합 후에는 이 트리거를 지워도 된다.
-  push:
-    branches: [watch-run]
   workflow_dispatch:
     inputs:
       loop_minutes:
