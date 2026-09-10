@@ -127,89 +127,132 @@ async function main() {
     log(`정적 HTML 조회 실패: ${e.message}`);
   }
 
-  // --- 단계 2~3: Playwright로 네트워크 캡처 + 상호작용 ---
-  log('\n## 단계 2~3 — 네트워크 캡처 및 상호작용\n');
+  // --- 단계 2~3: Playwright로 후보 경로 탐색 + 네트워크 캡처 ---
+  //
+  // 1차 정찰에서 /booking 응답이 1,746자뿐이고 /programs/booking, /booking/exhbition
+  // 으로 이동하는 정황이 잡혔다. /booking은 입구일 뿐 실제 예약 UI가 아니라는 뜻이므로,
+  // 후보 경로를 모두 열어보고 어디에 실물이 있는지 확인한다.
+  log('\n## 단계 2~3 — 후보 경로 탐색\n');
+
+  const CANDIDATE_PATHS = ['/booking', '/programs/booking', '/booking/exhbition'];
+
   const browser = await chromium.launch();
-  const context = await browser.newContext({ userAgent: 'Mozilla/5.0 (compatible; personal-use-recon)' });
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (compatible; personal-use-recon)',
+    viewport: { width: 1280, height: 2000 },
+  });
   const page = await context.newPage();
 
+  let currentPhase = 'init';
   page.on('request', (req) => {
     if (['xhr', 'fetch', 'document'].includes(req.resourceType())) {
-      networkLog.push({ phase: 'unlabeled', t: 'req', method: req.method(), url: req.url() });
+      networkLog.push({ phase: currentPhase, t: 'req', method: req.method(), url: req.url() });
     }
   });
   page.on('response', async (res) => {
-    const req = res.request();
-    if (['xhr', 'fetch'].includes(req.resourceType())) {
+    const type = res.request().resourceType();
+    if (['xhr', 'fetch', 'document'].includes(type)) {
       let body = null;
       try {
         const ct = res.headers()['content-type'] ?? '';
-        if (ct.includes('json') || ct.includes('text')) {
-          body = (await res.text()).slice(0, 5000);
-        }
-      } catch { /* 응답 본문을 못 읽어도 무시하고 계속 진행 */ }
-      const entry = { t: 'res', url: res.url(), status: res.status(), body };
+        if (ct.includes('json')) body = (await res.text()).slice(0, 6000);
+      } catch { /* 본문을 못 읽어도 나머지 정보는 유효하다 */ }
+      const entry = { phase: currentPhase, t: 'res', type, url: res.url(), status: res.status(), body };
       networkLog.push(entry);
       appendFileSync(netStream, JSON.stringify(entry) + '\n');
     }
   });
 
-  try {
-    await page.goto(BOOKING_URL, { waitUntil: 'networkidle', timeout: 30_000 });
-  } catch (e) {
-    log(`페이지 로드 실패 또는 타임아웃: ${e.message}`);
-  }
+  const pageReports = [];
 
-  await page.screenshot({ path: `${OUT}/01-initial.png`, fullPage: true }).catch(() => {});
-  writeFileSync(`${OUT}/rendered.html`, await page.content().catch(() => ''));
-  log(`초기 로드까지 캡처된 xhr/fetch 요청: ${networkLog.filter((n) => n.t === 'req').length}건`);
+  for (const path of CANDIDATE_PATHS) {
+    currentPhase = path;
+    const target = `${BASE}${path}`;
+    log(`\n### ${target}`);
 
-  // 날짜로 추정되는 요소를 찾아 최대 6개까지만 클릭한다. 위험한 텍스트는 절대 클릭하지 않는다.
-  const candidates = await page.$$eval('button, td, div, span, a', (els) =>
-    els
-      .filter((el) => el.children.length === 0) // 리프 노드만 — 컨테이너 오클릭 방지
-      .map((el, i) => ({ i, text: (el.textContent ?? '').trim(), tag: el.tagName }))
-      .filter((c) => c.text.length > 0 && c.text.length < 5),
-  );
-  const dateLikeCandidates = candidates.filter((c) => DATE_LIKE.test(c.text) && !DANGEROUS_TEXT.test(c.text));
-  log(`날짜로 추정되는 클릭 후보: ${dateLikeCandidates.length}개 (최대 6개만 시도)`);
-
-  let clicked = 0;
-  for (const cand of dateLikeCandidates.slice(0, 20)) {
-    if (clicked >= 6) break;
-    const before = networkLog.length;
     try {
-      const locator = page.locator(cand.tag.toLowerCase()).filter({ hasText: new RegExp(`^\\s*${cand.text}\\s*$`) }).first();
-      const isDisabled = await locator.isDisabled().catch(() => false);
-      const ariaDisabled = await locator.getAttribute('aria-disabled').catch(() => null);
-      if (isDisabled || ariaDisabled === 'true') {
-        log(`- "${cand.text}" 는 비활성 상태로 보여 건너뜀 (매진/휴관 판별에 유용한 신호)`);
-        continue;
-      }
-      await locator.click({ timeout: 3_000 });
-      await page.waitForTimeout(1_200); // 클릭 후 비동기 요청이 발생할 시간을 준다
-      clicked++;
-      const after = networkLog.length;
-      log(`- "${cand.text}" 클릭 → 새 xhr/fetch 요청 ${after - before}건`);
-      await page.screenshot({ path: `${OUT}/click-${clicked}-${cand.text}.png` }).catch(() => {});
+      const response = await page.goto(target, { waitUntil: 'networkidle', timeout: 40_000 });
+      log(`- HTTP ${response?.status() ?? '(응답 없음)'}`);
     } catch (e) {
-      log(`- "${cand.text}" 클릭 시도 실패: ${e.message}`);
+      log(`- 로드 실패: ${e.message}`);
+      continue;
     }
+
+    const finalUrl = page.url();
+    log(`- 최종 URL(리다이렉트 반영): ${finalUrl}`);
+    log(`- 제목: ${await page.title().catch(() => '(없음)')}`);
+
+    // iframe 안에 예약 위젯이 들어 있는 경우가 흔하다. 반드시 확인한다.
+    const frames = page.frames().filter((f) => f !== page.mainFrame());
+    log(`- iframe ${frames.length}개${frames.length ? ': ' + frames.map((f) => f.url()).join(', ') : ''}`);
+
+    const text = await page.evaluate(() => document.body?.innerText ?? '').catch(() => '');
+    log(`- 본문 텍스트 길이: ${text.length}자`);
+    if (text.length > 0) {
+      log('```');
+      log(text.slice(0, 2500).replace(/\n{3,}/g, '\n\n'));
+      log('```');
+    }
+
+    const html = await page.content().catch(() => '');
+    writeFileSync(`${OUT}/page${path.replace(/\//g, '_')}.html`, html);
+    await page.screenshot({ path: `${OUT}/page${path.replace(/\//g, '_')}.png`, fullPage: true }).catch(() => {});
+
+    pageReports.push({ path, finalUrl, textLength: text.length, text, html });
   }
 
-  // --- 단계: 매진/여석 텍스트 신호 스캔 ---
-  log('\n## 매진·여석 텍스트 신호 스캔\n');
-  const textSignals = await page.evaluate(() => {
-    const body = document.body.innerText;
-    const patterns = ['마감', '매진', '예약마감', '신청불가', '잔여', '남음', 'SOLD', 'sold-out', 'disabled', 'unavailable'];
-    return patterns.map((p) => ({ pattern: p, count: (body.match(new RegExp(p, 'gi')) || []).length }));
-  });
-  for (const { pattern, count } of textSignals) {
-    if (count > 0) log(`- "${pattern}": ${count}회 발견`);
-  }
+  // 가장 내용이 많은 페이지에서만 상호작용을 시도한다. 빈 껍데기를 클릭해봐야 의미가 없다.
+  const richest = pageReports.sort((a, b) => b.textLength - a.textLength)[0];
 
-  const disabledCount = await page.locator('[disabled], [aria-disabled="true"], .disabled, .sold-out').count().catch(() => 0);
-  log(`- disabled/aria-disabled/.disabled/.sold-out 셀렉터 매칭: ${disabledCount}개`);
+  if (richest && richest.textLength > 0) {
+    log(`\n## 상호작용 대상: ${richest.finalUrl} (본문 ${richest.textLength}자)\n`);
+    currentPhase = 'interact';
+    await page.goto(richest.finalUrl, { waitUntil: 'networkidle', timeout: 40_000 }).catch(() => {});
+
+    const candidates = await page.$$eval('button, td, div, span, a, li', (els) =>
+      els
+        .filter((el) => el.children.length === 0)
+        .map((el) => ({ text: (el.textContent ?? '').trim(), tag: el.tagName }))
+        .filter((c) => c.text.length > 0 && c.text.length < 5),
+    ).catch(() => []);
+
+    const dateLike = candidates.filter((c) => DATE_LIKE.test(c.text) && !DANGEROUS_TEXT.test(c.text));
+    log(`날짜로 추정되는 클릭 후보: ${dateLike.length}개 (최대 6개만 시도)`);
+
+    let clicked = 0;
+    for (const cand of dateLike.slice(0, 20)) {
+      if (clicked >= 6) break;
+      const before = networkLog.length;
+      try {
+        const locator = page.locator(cand.tag.toLowerCase())
+          .filter({ hasText: new RegExp(`^\\s*${cand.text}\\s*$`) }).first();
+        if (await locator.isDisabled().catch(() => false)) {
+          log(`- "${cand.text}" 비활성 — 매진/휴관 신호일 수 있음`);
+          continue;
+        }
+        await locator.click({ timeout: 3_000 });
+        await page.waitForTimeout(1_500);
+        clicked++;
+        log(`- "${cand.text}" 클릭 → 새 요청 ${networkLog.length - before}건`);
+        await page.screenshot({ path: `${OUT}/click-${clicked}.png`, fullPage: true }).catch(() => {});
+      } catch (e) {
+        log(`- "${cand.text}" 클릭 실패: ${e.message.split('\n')[0]}`);
+      }
+    }
+
+    log('\n## 매진·여석 텍스트 신호 스캔\n');
+    const signals = await page.evaluate(() => {
+      const body = document.body?.innerText ?? '';
+      const patterns = ['마감', '매진', '예약마감', '신청불가', '잔여', '남음', '가능', '예약', '회차', 'SOLD'];
+      return patterns.map((p) => ({ p, n: (body.match(new RegExp(p, 'gi')) || []).length }));
+    }).catch(() => []);
+    for (const { p, n } of signals) if (n > 0) log(`- "${p}": ${n}회`);
+
+    const disabledCount = await page.locator('[disabled], [aria-disabled="true"], .disabled, .sold-out').count().catch(() => 0);
+    log(`- disabled 계열 셀렉터 매칭: ${disabledCount}개`);
+  } else {
+    log('\n**모든 후보 경로에서 본문 텍스트를 얻지 못했습니다.** 로그인이 필요하거나 봇 차단이 있을 수 있습니다.');
+  }
 
   await browser.close();
 
@@ -261,7 +304,7 @@ async function main() {
   // JSON API가 없으면 이 발췌가 유일한 근거가 된다.
   log('\n## 렌더된 HTML 발췌 (예약 관련 부분)\n');
   let rendered = '';
-  try { rendered = readFileSync(`${OUT}/rendered.html`, 'utf8'); } catch { /* 저장 실패 시 아래에서 안내한다 */ }
+  try { rendered = readFileSync(`${OUT}/page_programs_booking.html`, 'utf8'); } catch { /* 아래에서 안내한다 */ }
   if (rendered) {
     // 회차 시각처럼 보이는 텍스트 주변을 잘라서 보여준다.
     const timePattern = /\d{1,2}\s*:\s*\d{2}/g;
