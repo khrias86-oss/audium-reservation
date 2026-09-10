@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "verify": "pnpm typecheck && pnpm test",
     "simulate": "tsx scripts/simulate.ts",
-    "recon": "node scripts/recon-audeum.mjs"
+    "recon": "node scripts/recon-audeum.mjs",
+    "watch:once": "tsx src/watch-once.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
