@@ -23,7 +23,36 @@ const Issue = z.object({
   title: z.string(),
   body: z.string().nullable(),
   state: z.string(),
+  labels: z.array(z.union([z.string(), z.object({ name: z.string() })])).optional(),
 });
+
+/** 라벨은 문자열로도 객체로도 온다. 둘 다 받아 이름만 뽑는다. */
+function labelNames(issue: z.infer<typeof Issue>): string[] {
+  return (issue.labels ?? []).map((l) => (typeof l === 'string' ? l : l.name));
+}
+
+/**
+ * 이 이슈가 감시 **신청서**인가.
+ *
+ * ## 왜 라벨로 판별하지 않는가
+ *
+ * 처음에는 `watch-request` 라벨만 봤다. 그런데 실제로 사용자가 폰에서 신청서를
+ * 냈더니 **라벨이 붙지 않았다.** 신청 링크에 `?labels=watch-request`를 담아
+ * 보내는데, GitHub 모바일 웹의 이슈 작성 화면은 라벨 칸을 그리지 않고 그 값을
+ * 조용히 버린다. 제목과 본문은 그대로 채워지므로 사용자 눈에는 정상으로 보이고,
+ * 시스템은 그 신청서를 영원히 못 본다. **가장 나쁜 종류의 실패다.**
+ *
+ * 그래서 판별 기준을 신청서의 **모양**으로 바꿨다. 라벨은 있으면 좋은 표시일 뿐,
+ * 없다고 신청이 무효가 되지는 않는다.
+ *
+ * 대신 우리가 만든 알림 이슈를 신청서로 오해하면 안 된다. 알림에는
+ * `audeum-alert` 라벨이 붙으므로 그것만 명시적으로 제외한다.
+ */
+function looksLikeRequest(issue: z.infer<typeof Issue>): boolean {
+  if (labelNames(issue).includes('audeum-alert')) return false;
+  const body = issue.body ?? '';
+  return body.includes('### 관람 희망 날짜') || issue.title.trimStart().startsWith('[감시]');
+}
 
 export interface WatchRequest {
   readonly issueNumber: number;
@@ -31,6 +60,8 @@ export interface WatchRequest {
   readonly time: string;
   readonly product: 'exhibition' | 'lecture';
   readonly priority: number;
+  /** 라벨이 빠진 신청서. 시스템이 뒤늦게 붙여 준다. */
+  readonly missingLabel: boolean;
 }
 
 /** 이슈 본문에서 `### 제목` 다음에 오는 값을 꺼낸다. */
@@ -64,6 +95,7 @@ export function parseWatchRequests(
 
   for (const issue of issues.data) {
     if (issue.state !== 'open') continue;
+    if (!looksLikeRequest(issue)) continue;
 
     const body = issue.body ?? '';
     const date = fieldValue(body, '관람 희망 날짜');
@@ -92,6 +124,7 @@ export function parseWatchRequests(
       product: productText.includes('렉처') ? 'lecture' : 'exhibition',
       // "1 (가장 원함)" 같은 표기에서 앞의 숫자만 쓴다. 못 읽으면 뒤로 미룬다.
       priority: Number.parseInt(priorityText, 10) || 99,
+      missingLabel: !labelNames(issue).includes('watch-request'),
     });
   }
 

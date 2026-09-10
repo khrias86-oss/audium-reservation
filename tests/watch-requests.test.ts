@@ -74,3 +74,66 @@ describe('잘못된 이슈 처리', () => {
     expect(problems).toHaveLength(1);
   });
 });
+
+describe('라벨 없이 낸 신청서', () => {
+  // 실제로 일어난 일이다. 사용자가 폰에서 신청서를 냈는데 라벨이 붙지 않았고,
+  // 시스템은 그 신청을 영원히 못 봤다. 제목과 본문은 정상이라 사용자 눈에는
+  // 아무 문제가 없어 보였다 — 가장 나쁜 종류의 실패다.
+  const phoneIssue = {
+    number: 6,
+    title: '[감시] 2026-09-19 13:30',
+    body: '### 관람 희망 날짜\n\n2026-09-19\n\n### 희망 회차\n\n13:30\n\n### 관람 종류\n\n전시 도슨트\n\n### 우선순위\n\n1',
+    state: 'open',
+  };
+
+  it('라벨이 없어도 신청서로 인식한다', () => {
+    const { requests } = parseWatchRequests([phoneIssue]);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.date).toBe('2026-09-19');
+    expect(requests[0]?.time).toBe('13:30');
+  });
+
+  it('라벨이 빠졌다는 사실을 표시해 나중에 붙일 수 있게 한다', () => {
+    const { requests } = parseWatchRequests([phoneIssue]);
+    expect(requests[0]?.missingLabel).toBe(true);
+
+    const labelled = parseWatchRequests([{ ...phoneIssue, labels: [{ name: 'watch-request' }] }]);
+    expect(labelled.requests[0]?.missingLabel).toBe(false);
+  });
+
+  it('라벨이 문자열 배열로 와도 읽는다', () => {
+    const { requests } = parseWatchRequests([{ ...phoneIssue, labels: ['watch-request'] }]);
+    expect(requests[0]?.missingLabel).toBe(false);
+  });
+
+  it('우리가 만든 알림 이슈를 신청서로 오해하지 않는다', () => {
+    // 알림에도 날짜·회차가 적혀 있으므로, 제외하지 않으면 스스로를 감시하게 된다.
+    const alert = {
+      number: 7,
+      title: '🎉 오디움 자리 났습니다 — 2026-09-19 13:30 (지금 예약하세요)',
+      body: '## 2026-09-19 (토) 13:30\n\n### 관람 희망 날짜\n\n2026-09-19',
+      state: 'open',
+      labels: [{ name: 'audeum-alert' }, { name: 'slot:2026-09-19T13:30' }],
+    };
+    const { requests } = parseWatchRequests([alert]);
+    expect(requests).toHaveLength(0);
+  });
+
+  it('신청서와 무관한 이슈는 조용히 넘긴다 — 문제로 보고하지 않는다', () => {
+    // 이제 모든 열린 이슈를 받아오므로, 관계없는 이슈까지 경고를 띄우면
+    // 진짜 문제가 그 소음에 묻힌다.
+    const { requests, problems } = parseWatchRequests([
+      { number: 8, title: 'README 오타', body: '고쳐주세요', state: 'open' },
+    ]);
+    expect(requests).toHaveLength(0);
+    expect(problems).toHaveLength(0);
+  });
+
+  it('신청서 모양인데 내용이 잘못됐으면 문제로 보고한다', () => {
+    const { requests, problems } = parseWatchRequests([
+      { number: 9, title: '[감시] 잘못됨', body: '### 관람 희망 날짜\n\n내일\n\n### 희망 회차\n\n오전', state: 'open' },
+    ]);
+    expect(requests).toHaveLength(0);
+    expect(problems[0]).toContain('#9');
+  });
+});

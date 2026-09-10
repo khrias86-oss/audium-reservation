@@ -45,6 +45,27 @@ const gh = async (path: string) => {
   return res.json() as Promise<unknown>;
 };
 
+/** 라벨 하나를 붙인다. 실패해도 감시를 멈추지 않는다 — 표시일 뿐이다. */
+async function addLabel(issueNumber: number, label: string): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/labels`,
+      {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          accept: 'application/vnd.github+json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ labels: [label] }),
+      },
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 const summary: string[] = [];
 const say = (line: string) => { console.log(line); summary.push(line); };
 
@@ -54,7 +75,9 @@ async function main(): Promise<void> {
     ? '⚠️ **실제 예약 모드** — 자리를 찾으면 예약을 진행합니다'
     : gate.reason);
 
-  const issues = await gh('/issues?state=open&labels=watch-request&per_page=100');
+  // 라벨로 걸러 받지 않는다. 폰에서 낸 신청서에는 라벨이 붙지 않기 때문이다
+  // (GitHub 모바일 웹이 `?labels=`를 조용히 버린다). 전부 받아 모양으로 판별한다.
+  const issues = await gh('/issues?state=open&per_page=100');
   const { requests, problems } = parseWatchRequests(issues);
 
   for (const problem of problems) say(`- ⚠️ ${problem}`);
@@ -64,6 +87,14 @@ async function main(): Promise<void> {
     return;
   }
   say(`\n감시 중: ${requests.map((r) => `${r.date} ${r.time}`).join(', ')}`);
+
+  // 라벨이 빠진 신청서에 뒤늦게 붙여 준다. 감시 자체는 라벨 없이도 되지만,
+  // 라벨이 있어야 사용자가 "내가 감시 중인 목록"을 한 번에 볼 수 있다.
+  for (const request of requests.filter((r) => r.missingLabel)) {
+    const added = await addLabel(request.issueNumber, 'watch-request');
+    say(`- #${request.issueNumber}: watch-request 라벨을 ${added ? '붙였습니다' : '붙이지 못했습니다'}`
+      + ' (폰에서 신청하면 GitHub이 라벨을 빠뜨립니다 — 감시에는 영향 없습니다)');
+  }
 
   // 사이트가 주는 날짜를 전부 훑지 않고, **신청한 날짜만** 물어본다.
   // 요청 수가 감시 항목 수에 비례해 늘어나지, 사이트 사정에 좌우되지 않는다.
