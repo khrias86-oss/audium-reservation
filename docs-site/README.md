@@ -14,10 +14,14 @@ GitHub 이슈 주소로 넘긴다. 이슈가 감시 목록이자 알림 채널�
 
 | 주소 | 성격 |
 |---|---|
-| **https://khrias86-oss.github.io/audium-reservation/** | GitHub Pages. `main`의 `docs-site/`가 바뀌면 자동 배포된다 |
-| https://claude.ai/code/artifact/1af3e850-4a59-4c2d-8501-39bb6548f72a | 비공개 사본. 소유자만 열린다 |
+| **https://claude.ai/code/artifact/1af3e850-4a59-4c2d-8501-39bb6548f72a** | 지금 쓰는 곳. 소유자만 열린다 |
+| https://khrias86-oss.github.io/audium-reservation/ | Pages를 켜면 여기서도 열린다 (아래 참고) |
 
-배포는 `.github/workflows/pages.yml`이 한다. **브랜치 배포를 쓰지 않은 이유**는
+배포는 `.github/workflows/pages.yml`이 한다. 다만 **Pages는 한 번 사람이 켜야
+한다** — `Settings → Pages → Source: GitHub Actions`. Actions의 기본 토큰에는
+Pages 사이트를 *만들* 권한이 없고, 있는 것은 이미 켜진 Pages에 *배포할* 권한뿐이다
+(`Resource not accessible by integration`). 저장소 설정을 바꾸는 일이라 봇에게
+열어두지 않는 것이고, 합리적인 선이다. 켠 뒤로는 `docs-site/`가 바뀔 때마다 자동이다. **브랜치 배포를 쓰지 않은 이유**는
 그 방식이 루트나 `/docs` 두 곳만 고를 수 있기 때문이다. 이 저장소의 `docs/`는
 이미 설계 문서가 쓰고 있어서, 문서를 옮기거나 섞는 대신 Actions로 올린다.
 폴더 제약이 없고 Pages 활성화까지 자동으로 된다.
