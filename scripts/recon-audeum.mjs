@@ -214,15 +214,42 @@ async function main() {
     ).catch(() => []);
 
     if (inlineScripts.length) {
-      log(`인라인 스크립트 ${inlineScripts.length}개 (총 ${inlineScripts.reduce((n, t) => n + t.length, 0)}자):`);
-      for (const [i, script] of inlineScripts.entries()) {
-        log(`\n#### 스크립트 ${i + 1} (${script.length}자)`);
-        log('```js');
-        log(script.slice(0, 12_000).replace(/\n{3,}/g, '\n\n'));
-        if (script.length > 12_000) log(`\n... (${script.length - 12_000}자 생략, 아티팩트 참조)`);
-        log('```');
+      const all = inlineScripts.join('\n');
+      writeFileSync(`${OUT}/${slug}-scripts.js`, all);
+      log(`인라인 스크립트 ${inlineScripts.length}개, 총 ${all.length}자 (아티팩트에 전문 저장)`);
+
+      // 7차에서 스크립트를 통째로 찍었더니 로그가 2,600줄을 넘어 정작 읽기 어려웠다.
+      // 계약에 해당하는 부분만 뽑는다 — 엔드포인트, 대기열 연동 지점, 여석 판별 어휘.
+
+      // 1) 서버 엔드포인트: url:"..." 형태와 따옴표로 감싼 경로 리터럴
+      const urls = new Set();
+      for (const m of all.matchAll(/url\s*:\s*["'`]([^"'`]+)["'`]/g)) urls.add(m[1]);
+      for (const m of all.matchAll(/["'`](\/[a-zA-Z][\w\/-]{2,60})["'`]/g)) urls.add(m[1]);
+      log(`\n**엔드포인트 후보 ${urls.size}개**`);
+      for (const u of [...urls].sort()) log(`- \`${u}\``);
+
+      // 2) NetFunnel(대기열) 연동 지점 — 어느 단계에 게이트가 걸리는지
+      const netfunnel = [...all.matchAll(/.{0,160}NetFunnel.{0,160}/g)].map((m) => m[0]);
+      if (netfunnel.length) {
+        log(`\n**NetFunnel 연동 ${netfunnel.length}곳**`);
+        for (const n of netfunnel.slice(0, 8)) log(`- \`${n.replace(/\s+/g, ' ').trim()}\``);
       }
-      writeFileSync(`${OUT}/${slug}-scripts.js`, inlineScripts.join('\n\n/* ─── 다음 스크립트 ─── */\n\n'));
+
+      // 3) 여석·매진·회차 관련 코드 — 매진 판별 신호가 여기 있다
+      const KEYS = /잔여|매진|마감|남은|가능|selDate|selTime|selSeat|spectateDate|spectateTime|remainCnt|remain|soldOut|sold_out|seatCnt|reserveCnt|limitCnt|maxCnt/;
+      const hits = all.split('\n').map((l) => l.trim()).filter((l) => KEYS.test(l) && l.length < 400);
+      const uniqueHits = [...new Set(hits)];
+      log(`\n**여석·회차 관련 코드 ${uniqueHits.length}줄**`);
+      for (const h of uniqueHits.slice(0, 60)) log(`- \`${h}\``);
+
+      // 4) 폼 필드 이름 — 예약 제출에 무엇이 필요한지
+      const fields = new Set();
+      for (const m of all.matchAll(/(?:name|id)\s*[:=]\s*["']([a-zA-Z][\w]{2,40})["']/g)) fields.add(m[1]);
+      for (const m of all.matchAll(/\$\(["']#([a-zA-Z][\w]{2,40})["']\)/g)) fields.add(m[1]);
+      if (fields.size) {
+        log(`\n**폼 필드·요소 id 후보 ${fields.size}개**`);
+        log([...fields].sort().map((f) => `\`${f}\``).join(', '));
+      }
     }
 
     if (consoleErrors.length) {
