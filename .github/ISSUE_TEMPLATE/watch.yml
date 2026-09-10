@@ -1,0 +1,68 @@
+name: 🔔 빈자리 감시 신청
+description: 오디움 관람 예약의 빈자리를 감시할 날짜와 회차를 신청합니다.
+title: "[감시] "
+labels: ["watch-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        원하는 날짜와 회차를 고르면 시스템이 10분마다 빈자리를 확인합니다.
+        자리가 나면 **이 이슈에 댓글로 알려드리고 자동으로 예약**합니다.
+
+        감시를 그만두려면 이 이슈를 닫으면 됩니다.
+
+  - type: input
+    id: date
+    attributes:
+      label: 관람 희망 날짜
+      description: 오디움은 목·금·토만 운영합니다.
+      placeholder: 2026-03-14
+    validations:
+      required: true
+
+  - type: dropdown
+    id: time
+    attributes:
+      label: 희망 회차
+      description: 10시 회차는 오르골 시연이 포함되어 가장 인기가 많습니다.
+      options:
+        - "10:00"
+        - "11:00"
+        - "13:30"
+        - "14:30"
+        - "15:30"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: product
+    attributes:
+      label: 관람 종류
+      options:
+        - "전시 도슨트 관람"
+        - "렉처 프로그램"
+      default: 0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 우선순위
+      description: 여러 건을 신청했을 때 어느 것을 먼저 잡을지 정합니다. 1인 1매라 한 건만 예약됩니다.
+      options:
+        - "1 (가장 원함)"
+        - "2"
+        - "3"
+        - "4 (여유 있으면)"
+      default: 0
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 확인
+      options:
+        - label: 본인 명의로 예약하며, 가지 못하게 되면 즉시 취소하겠습니다.
+          required: true

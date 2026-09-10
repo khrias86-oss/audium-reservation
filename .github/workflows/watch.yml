@@ -1,0 +1,109 @@
+name: 🔔 오디움 빈자리 감시
+
+# ## 폴링 예산 — 왜 이 시간표인가
+#
+# private 저장소의 무료 Actions 시간은 **월 2,000분**이고, 실행 1회는 몇 초가
+# 걸리든 **1분으로 반올림**되어 청구된다. 즉 비용을 결정하는 것은 실행 속도가
+# 아니라 **실행 횟수**다. 10분 간격 상시 폴링은 월 4,320회 = 4,320분이라
+# 한도의 두 배를 넘는다.
+#
+# 그래서 사이트의 실제 운영 방식에 맞춰 횟수를 깎았다 (11차 정찰에서 사이트가
+# `/booking/date` 응답에 실어 보낸 공지로 확인):
+#
+#   - 전시 관람은 **목·금·토**에만 열린다 (예: 9/24, 9/26 & 10/1, 2, 3)
+#   - 예약은 **격주 화요일 오후 2시(KST)**에 오픈된다
+#   - 취소표는 관람 1~2일 전과 당일에 주로 나온다
+#
+# 그래서 **수~토 09:00~22:00(KST)**만 감시한다. 그 밖의 시간은 관람일이
+# 아니거나 취소가 거의 나지 않는 구간이라, 돌려도 대부분 헛돈다.
+#
+#   수~토 13시간 × 6회/시간 = 78회/일
+#   78 × 4일 × 4.33주 ≈ **1,352분/월**  (한도의 68%, 여유 648분)
+#   + 예약 오픈 시각 집중 감시 화요일 4회 × 4.33주 ≈ 17분/월
+#   ─────────────────────────────────────────
+#   합계 ≈ **1,370분 / 2,000분**
+#
+# KST는 UTC+9이고 09:00~22:00 KST는 자정을 넘지 않으므로, UTC로는 같은 요일
+# 00:00~13:00이 된다. 요일 번호도 그대로 쓴다 (수=3 … 토=6).
+on:
+  schedule:
+    # 수~토 09:00~21:50 KST (= 같은 요일 00:00~12:50 UTC)
+    - cron: '*/10 0-12 * * 3-6'
+    # 격주 화요일 14:00 KST 예약 오픈 직후 — 열리자마자 상황을 본다.
+    # cron은 격주를 표현할 수 없어 매주 돌지만, 회당 4분이라 예산에 영향이 없다.
+    - cron: '0,10,20,30 5 * * 2'
+  # watch-run 브랜치 푸시는 시험 실행용이다. workflow_dispatch는 워크플로가 기본
+  # 브랜치에 있어야만 동작하는데, 이 워크플로는 아직 병합 전이라 쓸 수 없다.
+  # 병합 후에는 이 트리거를 지워도 된다.
+  push:
+    branches: [watch-run]
+  workflow_dispatch:
+    inputs:
+      confirm_live_booking:
+        description: '⚠️ 실제로 예약합니다 (체크하지 않으면 확인만 합니다)'
+        type: boolean
+        default: false
+
+concurrency:
+  # 이전 실행이 끝나기 전에 다음 실행이 겹치면 중복 예약 위험이 생긴다.
+  group: audeum-watch
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write   # 빈자리를 찾으면 이슈로 알린다
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    # 폭주 시 청구를 막는 상한. 브라우저를 걷어낸 뒤 실제 실행은 30초 안팎이므로
+    # 5분이면 넉넉하고, 무언가 매달려도 5분에서 끊긴다.
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: corepack enable
+      # 브라우저는 더 이상 필요 없다 (11차 정찰). 조회는 폼 POST 한 건이므로
+      # 실행에 필요한 것은 tsx·cheerio·zod뿐이고, 설치가 몇 초로 끝난다.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: 감시할 항목이 있는지 먼저 확인
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 신청서는 본문에 "### 관람 희망 날짜"가 있는 열린 이슈다.
+          #
+          # 예전에는 watch-request 라벨로 셌는데, 폰에서 낸 신청서에는 그 라벨이
+          # 붙지 않는다 — 신청 링크가 ?labels=를 담아 보내도 GitHub 모바일 웹이
+          # 조용히 버린다. 그래서 실제 신청이 있는데도 0으로 세고 그냥 끝냈다.
+          # 하나도 없을 때만 건너뛰면 되므로, 판별은 넉넉한 쪽이 안전하다.
+          count=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/issues?state=open&per_page=100" \
+            | grep -c '관람 희망 날짜' || true)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "감시 요청 $count건"
+
+      - name: 빈자리 확인
+        if: steps.check.outputs.count != '0'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          # 위험한 쪽(실제 예약)은 **명시적으로 참일 때만** 선택되게 한다.
+          #
+          # 이전 표현식은 `inputs.dry_run == false`였는데, push로 실행되면
+          # inputs가 비어 있고 GitHub 표현식에서 null == false 가 참이 되어
+          # 실제 예약 모드로 켜졌다. 첫 시험 운전이 실제로 그렇게 돌았다.
+          # 없는 값·모르는 값은 전부 안전한 쪽으로 떨어져야 한다.
+          DRY_RUN: ${{ inputs.confirm_live_booking == true && 'false' || 'true' }}
+          APPLICANT_NAME: ${{ secrets.APPLICANT_NAME }}
+          APPLICANT_EMAIL: ${{ secrets.APPLICANT_EMAIL }}
+        run: npx tsx src/watch-once.ts
+
+      - name: 감시 요청이 없을 때
+        if: steps.check.outputs.count == '0'
+        run: echo "감시 중인 항목이 없습니다. 이슈로 '빈자리 감시 신청'을 등록하세요." >> "$GITHUB_STEP_SUMMARY"

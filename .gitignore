@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+
+# 정찰/실행 산출물 — 개인정보와 세션 쿠키가 섞일 수 있으므로 절대 커밋 금지
+runs/
+recon-output/
+storage-state.json
+playwright-report/
+test-results/

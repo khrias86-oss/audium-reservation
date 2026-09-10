@@ -1,0 +1,46 @@
+name: M1 정찰 (오디움 사이트 구조 조사)
+
+# 수동 트리거만 허용한다. 정찰은 반복 폴링이 아니라 1회성 조사이므로
+# 스케줄을 걸지 않는다 — 걸면 준수 요건(§0.5)을 벗어난 자동 반복 접근이 된다.
+on:
+  workflow_dispatch: {}
+
+# GitHub Actions 러너는 이 저장소를 만든 Claude Code 세션과 별개의 네트워크를 쓴다.
+# audeum.org가 그 세션에서 차단되어 있었던 것과 무관하게 여기서는 접근 가능하다.
+
+permissions:
+  contents: read
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15  # 정찰은 5분 내외로 끝나야 정상이다. 걸리면 뭔가 잘못된 것.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+
+      - name: Playwright 브라우저 설치
+        run: npx playwright install --with-deps chromium
+
+      - name: 정찰 실행
+        run: node scripts/recon-audeum.mjs
+        # 실패해도 아티팩트는 남긴다 — 어디서 막혔는지 아는 것 자체가 유용한 정보다.
+        continue-on-error: true
+
+      - name: 리포트를 잡 서머리에 표시
+        if: always()
+        run: cat recon-output/RECON_REPORT.md >> "$GITHUB_STEP_SUMMARY" || echo "리포트 없음"
+
+      - name: 정찰 산출물 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recon-output
+          path: recon-output/
+          retention-days: 14

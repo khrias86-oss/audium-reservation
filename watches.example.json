@@ -1,0 +1,24 @@
+{
+  "_안내": [
+    "이 파일을 watches.json 으로 복사한 뒤 GitHub 모바일에서 직접 편집하세요.",
+    "예약자 이름과 이메일은 여기 넣지 마세요 — 저장소에 커밋됩니다.",
+    "그 정보는 GitHub Settings > Secrets 에 넣습니다.",
+    "product: exhibition = 전시 도슨트 관람, lecture = 렉처 프로그램",
+    "priority: 숫자가 낮을수록 먼저 예약을 시도합니다. 생략하면 적힌 순서를 씁니다."
+  ],
+  "watches": [
+    {
+      "date": "2026-03-14",
+      "time": "10:00",
+      "product": "exhibition",
+      "priority": 0,
+      "note": "토요일 1회차 — 오르골 시연 포함"
+    },
+    {
+      "date": "2026-03-14",
+      "time": "11:00",
+      "product": "exhibition",
+      "priority": 1
+    }
+  ]
+}

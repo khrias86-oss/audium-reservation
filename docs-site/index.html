@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#141414">
+<title>오디움 빈자리 감시</title>
+<meta name="description" content="오디움 관람 빈자리를 자동으로 감시합니다. 날짜와 회차를 눌러서 고르세요.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="오디움 감시">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔔</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔔</text></svg>">
+<style>
+  :root {
+    --bg: #fbfbfa; --fg: #1a1a1a; --muted: #6b6b6b; --line: #e3e3e0;
+    --card: #ffffff; --accent: #1a1a1a; --accent-fg: #ffffff;
+    --pick: #2b7a4b; --pick-soft: #e8f3ec; --warn: #8a5a00; --warn-soft: #fdf3df;
+    --tap: 46px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141414; --fg: #f0efec; --muted: #9a9a96; --line: #2c2c2a;
+      --card: #1d1d1b; --accent: #f0efec; --accent-fg: #141414;
+      --pick: #6ec48f; --pick-soft: #1e3227; --warn: #e0b968; --warn-soft: #2a2416;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", system-ui, sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px calc(104px + env(safe-area-inset-bottom));
+    max-width: 560px; margin-inline: auto;
+  }
+  h1 { font-size: 21px; margin: 4px 0 2px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+  h2 { font-size: 13px; letter-spacing: .04em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+  h2 b { color: var(--fg); font-weight: 600; }
+
+  .notice { background: var(--warn-soft); border: 1px solid transparent; color: var(--warn); font-size: 13px;
+            border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+  .notice b { color: inherit; }
+
+  .month { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .month button {
+    width: var(--tap); height: var(--tap); border: 1px solid var(--line); background: transparent;
+    color: var(--fg); border-radius: 10px; font-size: 18px; cursor: pointer;
+  }
+  .month button:disabled { opacity: .3; }
+  .month strong { font-size: 16px; }
+
+  .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  /* 드래그 중에 브라우저가 스크롤·텍스트선택을 가로채지 않게 한다 */
+  #days { touch-action: none; user-select: none; -webkit-user-select: none; }
+  .dow { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0; }
+  .day {
+    aspect-ratio: 1; min-height: var(--tap); border: 1px solid transparent; background: transparent;
+    color: var(--fg); border-radius: 10px; font-size: 15px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums;
+    padding: 0; transition: background .08s, color .08s;
+  }
+  .day.off { color: var(--muted); opacity: .3; cursor: default; }
+  .day.open { border-color: var(--line); }
+  .day.on { background: var(--pick); color: #fff; border-color: var(--pick); font-weight: 600; }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 10px; }
+
+  .chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
+  .chip {
+    min-height: var(--tap); border: 1px solid var(--line); background: transparent; color: var(--fg);
+    border-radius: 10px; font-size: 15px; cursor: pointer; font-variant-numeric: tabular-nums; padding: 0 6px;
+  }
+  .chip.on { background: var(--pick); color: #fff; border-color: var(--pick); font-weight: 600; }
+  .two { grid-template-columns: 1fr 1fr; }
+  .note { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+
+  ul.picked { list-style: none; padding: 0; margin: 0; }
+  ul.picked li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  ul.picked li:last-child { border-bottom: 0; }
+  .rank { width: 26px; height: 26px; border-radius: 50%; background: var(--pick-soft); color: var(--pick);
+          display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
+  .what { flex: 1; font-size: 15px; }
+  .what small { display: block; color: var(--muted); font-size: 12px; }
+  .icon { width: 36px; height: 36px; border: 0; background: transparent; color: var(--muted); font-size: 18px; cursor: pointer; flex: none; }
+  .icon:disabled { opacity: .25; cursor: default; }
+  .empty { color: var(--muted); font-size: 14px; margin: 0; }
+
+  ol.steps { list-style: none; padding: 0; margin: 0; counter-reset: s; }
+  ol.steps li { margin-bottom: 8px; }
+  a.step {
+    display: flex; align-items: center; gap: 12px; min-height: 54px; padding: 8px 14px;
+    border: 1px solid var(--line); border-radius: 12px; text-decoration: none; color: var(--fg); font-size: 15px;
+  }
+  a.step .n { width: 26px; height: 26px; border-radius: 50%; background: var(--pick-soft); color: var(--pick);
+              display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
+  a.step.done { border-color: var(--pick); background: var(--pick-soft); }
+  a.step .go-in { margin-left: auto; color: var(--muted); font-size: 13px; }
+
+  .bar {
+    position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(12px);
+    border-top: 1px solid var(--line);
+  }
+  .bar .inner { max-width: 560px; margin-inline: auto; }
+  .go {
+    display: block; width: 100%; min-height: 50px; border: 0; border-radius: 12px;
+    background: var(--accent); color: var(--accent-fg); font-size: 16px; font-weight: 600; cursor: pointer;
+  }
+  .go:disabled { opacity: .3; cursor: default; }
+  .hint { text-align: center; font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+  a.plain { color: var(--muted); font-size: 13px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<h1>오디움 빈자리 감시</h1>
+<p class="sub">회차를 고르고, 달력에서 날짜를 <b>누르거나 문질러서</b> 고르세요.</p>
+
+<div class="notice" id="notice">
+  <b>예약 오픈</b> 격주 화요일 오후 2시(KST) · 관람은 <b>목·금·토</b>만 운영합니다.
+  빈자리 감시는 이미 열린 날짜의 <b>취소표</b>를 잡는 기능입니다.
+</div>
+
+<section>
+  <h2><b>1.</b> 관람 종류</h2>
+  <div class="chips two" id="kinds"></div>
+</section>
+
+<section>
+  <h2><b>2.</b> 희망 회차 <span id="tcount"></span></h2>
+  <div class="chips" id="times"></div>
+  <p class="note">여러 개를 골라도 됩니다. 고른 회차가 날짜마다 각각 감시 대상이 됩니다.</p>
+</section>
+
+<section>
+  <h2><b>3.</b> 관람 희망 날짜</h2>
+  <div class="month">
+    <button id="prev" aria-label="이전 달">‹</button>
+    <strong id="label"></strong>
+    <button id="next" aria-label="다음 달">›</button>
+  </div>
+  <div class="grid" id="dow"></div>
+  <div class="grid" id="days"></div>
+  <p class="legend">손가락으로 <b>문지르면</b> 여러 날짜가 한 번에 선택됩니다. 목·금·토만 고를 수 있습니다.</p>
+</section>
+
+<section>
+  <h2>감시할 목록 <span id="count" style="font-weight:400"></span></h2>
+  <ul class="picked" id="picked"></ul>
+  <p class="empty" id="none">아직 없습니다. 위에서 회차와 날짜를 고르면 여기에 쌓입니다.</p>
+  <p class="note">오디움은 <b>1인 1매</b>입니다. 위쪽부터 먼저 시도하고, 하나가 잡히면 나머지는 멈춥니다.
+     ↑ 를 눌러 순서를 올릴 수 있습니다.</p>
+</section>
+
+<section id="submit" hidden>
+  <h2>신청서 <span id="progress" style="font-weight:400"></span></h2>
+  <p class="note" style="margin:0 0 12px">
+    아래를 <b>위에서부터 하나씩</b> 누르세요. GitHub이 열리고 내용은 이미 채워져 있습니다.
+    초록색 <b>Create</b> 버튼만 누르면 감시가 시작됩니다.
+  </p>
+  <ol class="steps" id="steps"></ol>
+</section>
+
+<p style="text-align:center;margin-top:18px">
+  <a class="plain" id="mylist" href="#">내가 감시 중인 목록 보기 →</a>
+</p>
+
+<div class="bar"><div class="inner">
+  <button class="go" id="go" disabled>감시 신청서 만들기</button>
+  <p class="hint" id="hint">회차와 날짜를 고르세요</p>
+</div></div>
+
+<script>
+const REPO = 'khrias86-oss/audium-reservation';
+
+/** 실측한 회차 (2026-09-10 정찰). 사이트가 바꾸면 여기만 고치면 된다. */
+const ROUNDS = ['10:00', '11:00', '13:30', '14:30', '15:30'];
+const KINDS = [['exhibition', '전시 도슨트'], ['lecture', '렉처 프로그램']];
+/** 오디움은 목·금·토만 운영한다 (사이트 공지로 확인). 일=0 … 토=6 */
+const OPEN_DOW = [4, 5, 6];
+
+const $ = (id) => document.getElementById(id);
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const DOW = ['일','월','화','수','목','금','토'];
+const today = iso(new Date());
+
+let cursor = new Date();
+let kind = 'exhibition';
+let times = new Set();
+let dates = new Set();
+let order = [];        // 사용자가 올린 순서를 기억한다. 비어 있으면 날짜·회차순.
+/** ×로 빼낸 조합. 날짜와 회차의 곱집합에 구멍을 낼 수 있게 한다. */
+let excluded = new Set();
+let opened = new Set();
+
+const save = () => {
+  try {
+    localStorage.setItem('audeum.v2', JSON.stringify({
+      kind, times: [...times], dates: [...dates], order, excluded: [...excluded],
+    }));
+  } catch { /* 사파리 프라이빗 모드 등에서는 저장이 막힌다. 기능은 그대로 동작한다. */ }
+};
+const load = () => {
+  try {
+    const s = JSON.parse(localStorage.getItem('audeum.v2') || '{}');
+    if (s.kind) kind = s.kind;
+    if (Array.isArray(s.times)) times = new Set(s.times);
+    // 지난 날짜는 되살리지 않는다. 남아 있으면 잡을 수 없는 것을 감시하게 된다.
+    if (Array.isArray(s.dates)) dates = new Set(s.dates.filter((d) => d >= today));
+    if (Array.isArray(s.order)) order = s.order;
+    if (Array.isArray(s.excluded)) excluded = new Set(s.excluded);
+  } catch { /* 저장된 값이 깨졌으면 빈 상태로 시작한다 */ }
+};
+
+/** 고른 회차 × 고른 날짜. 순서는 사용자가 올린 것을 먼저, 나머지는 날짜·회차순. */
+function picks() {
+  const all = [];
+  for (const d of [...dates].sort()) {
+    for (const t of ROUNDS.filter((r) => times.has(r))) all.push({ key: `${d}|${t}`, date: d, time: t });
+  }
+  const rank = (p) => { const i = order.indexOf(p.key); return i === -1 ? 1e9 : i; };
+  return all
+    .filter((p) => !excluded.has(p.key))
+    .sort((a, b) => rank(a) - rank(b) || (a.key < b.key ? -1 : 1));
+}
+
+function drawKinds() {
+  $('kinds').innerHTML = KINDS
+    .map(([v, l]) => `<button class="chip ${kind === v ? 'on' : ''}" data-k="${v}">${l}</button>`).join('');
+  for (const b of $('kinds').querySelectorAll('[data-k]')) {
+    b.onclick = () => { kind = b.dataset.k; drawKinds(); refresh(); };
+  }
+}
+
+function drawTimes() {
+  $('times').innerHTML = ROUNDS
+    .map((t) => `<button class="chip ${times.has(t) ? 'on' : ''}" data-t="${t}">${t}</button>`).join('');
+  for (const b of $('times').querySelectorAll('[data-t]')) {
+    b.onclick = () => {
+      const t = b.dataset.t;
+      if (times.has(t)) times.delete(t); else times.add(t);
+      drawTimes(); refresh();
+    };
+  }
+  $('tcount').textContent = times.size ? `· ${times.size}개 선택` : '';
+}
+
+function drawDow() {
+  $('dow').innerHTML = DOW.map((d) => `<div class="dow">${d}</div>`).join('');
+}
+
+function drawDays() {
+  const y = cursor.getFullYear(), m = cursor.getMonth();
+  $('label').textContent = `${y}년 ${m + 1}월`;
+  const now = new Date();
+  $('prev').disabled = new Date(y, m, 1) <= new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const first = new Date(y, m, 1).getDay();
+  const total = new Date(y, m + 1, 0).getDate();
+  let html = '';
+  for (let i = 0; i < first; i++) html += '<div></div>';
+  for (let d = 1; d <= total; d++) {
+    const cell = new Date(y, m, d);
+    const key = iso(cell);
+    const bookable = OPEN_DOW.includes(cell.getDay()) && key >= today;
+    const cls = ['day', bookable ? 'open' : 'off', dates.has(key) ? 'on' : ''].join(' ');
+    html += `<button class="${cls}" ${bookable ? `data-d="${key}"` : 'disabled'}>${d}</button>`;
+  }
+  $('days').innerHTML = html;
+}
+
+/**
+ * 달력 위 드래그 선택.
+ *
+ * 버튼마다 click 핸들러를 다는 대신 컨테이너에서 포인터를 추적한다. 그래야
+ * 손가락이 지나간 칸을 전부 잡을 수 있다. `touch-action: none`이 필요하다 —
+ * 없으면 사파리가 이 제스처를 스크롤로 가져가 버린다.
+ *
+ * 드래그를 시작한 칸의 상태를 뒤집고, 지나가는 칸은 전부 같은 상태로 맞춘다.
+ * 켜진 칸에서 시작하면 문지르는 만큼 꺼지고, 꺼진 칸에서 시작하면 켜진다.
+ */
+(function dragSelect() {
+  const host = $('days');
+  let painting = null;   // true=켜기, false=끄기, null=드래그 아님
+
+  const dayAt = (x, y) => {
+    const el = document.elementFromPoint(x, y);
+    return el && el.dataset && el.dataset.d ? el : null;
+  };
+  const apply = (el) => {
+    if (!el) return;
+    const key = el.dataset.d;
+    if (painting) {
+      dates.add(key);
+      // 뺐던 날짜를 다시 켰는데 일부 회차가 돌아오지 않으면 고장으로 보인다.
+      for (const k of [...excluded]) if (k.startsWith(key + '|')) excluded.delete(k);
+    } else {
+      dates.delete(key);
+    }
+    el.classList.toggle('on', painting);
+  };
+
+  host.addEventListener('pointerdown', (e) => {
+    const el = dayAt(e.clientX, e.clientY);
+    if (!el) return;
+    painting = !dates.has(el.dataset.d);
+    apply(el);
+    // 포인터를 컨테이너에 붙들어야 손가락이 칸 밖으로 나가도 이벤트가 계속 온다.
+    host.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  host.addEventListener('pointermove', (e) => {
+    if (painting === null) return;
+    apply(dayAt(e.clientX, e.clientY));
+  });
+
+  const end = () => { if (painting === null) return; painting = null; refresh(); };
+  host.addEventListener('pointerup', end);
+  host.addEventListener('pointercancel', end);
+})();
+
+function drawPicked() {
+  const list = picks();
+  $('picked').innerHTML = list.map((p, i) => {
+    const d = new Date(p.date + 'T00:00:00');
+    return `<li>
+      <span class="rank">${i + 1}</span>
+      <span class="what">${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]}) ${p.time}
+        <small>${KINDS.find(([v]) => v === kind)[1]}</small></span>
+      <button class="icon" data-up="${p.key}" aria-label="순서 올리기" ${i === 0 ? 'disabled' : ''}>↑</button>
+      <button class="icon" data-rm="${p.key}" aria-label="빼기">×</button>
+    </li>`;
+  }).join('');
+
+  for (const b of $('picked').querySelectorAll('[data-up]')) {
+    b.onclick = () => {
+      const key = b.dataset.up;
+      const keys = picks().map((p) => p.key);
+      const i = keys.indexOf(key);
+      if (i > 0) { keys.splice(i, 1); keys.splice(i - 1, 0, key); order = keys; }
+      refresh();
+    };
+  }
+  for (const b of $('picked').querySelectorAll('[data-rm]')) {
+    b.onclick = () => {
+      const key = b.dataset.rm;
+      const [date] = key.split('|');
+      // 회차 선택을 건드리면 다른 날짜까지 영향을 받는다. 그래서 이 조합 하나만
+      // 제외 목록에 넣고, 그 날짜에 남는 회차가 없어지면 날짜 자체를 뺀다.
+      excluded.add(key);
+      if (!picks().some((p) => p.date === date)) { dates.delete(date); }
+      refresh();
+    };
+  }
+
+  $('none').hidden = list.length > 0;
+  $('count').textContent = list.length ? `${list.length}건` : '';
+  $('go').disabled = list.length === 0;
+  $('hint').textContent = list.length
+    ? `${list.length}건을 감시 신청합니다`
+    : (times.size === 0 ? '회차를 고르세요' : '달력에서 날짜를 고르세요');
+}
+
+function issueUrl(p, rank) {
+  const body = [
+    '### 관람 희망 날짜', '', p.date, '',
+    '### 희망 회차', '', p.time, '',
+    '### 관람 종류', '', KINDS.find(([v]) => v === kind)[1], '',
+    '### 우선순위', '', String(Math.min(rank, 4)), '',
+    '### 확인', '', '- [X] 본인 명의로 예약하며, 가지 못하게 되면 즉시 취소하겠습니다.',
+  ].join('\n');
+  return `https://github.com/${REPO}/issues/new?labels=watch-request`
+    + `&title=${encodeURIComponent(`[감시] ${p.date} ${p.time}`)}`
+    + `&body=${encodeURIComponent(body)}`;
+}
+
+/**
+ * 신청서를 한 건씩 눌러서 여는 목록으로 보여준다.
+ *
+ * 처음에는 버튼 한 번으로 여러 탭을 열려고 했는데, 그건 동작하지 않는다.
+ * 첫 건에서 `location.href`로 현재 창을 넘겨버리면 나머지를 열 예정이던
+ * 타이머가 페이지와 함께 사라지고, 새 탭으로 열면 사파리가 팝업으로 막는다.
+ * 어느 쪽이든 첫 건만 등록되고 사용자는 나머지가 빠진 줄 모른다.
+ *
+ * 그래서 사용자가 직접 누르는 링크로 바꿨다. 탭마다 사용자의 제스처가 있으니
+ * 차단되지 않고, 무엇이 남았는지 눈에 보인다.
+ */
+function drawSteps() {
+  const list = picks();
+  $('steps').innerHTML = list.map((p, i) => {
+    const d = new Date(p.date + 'T00:00:00');
+    return `<li><a class="step ${opened.has(p.key) ? 'done' : ''}" data-k="${p.key}"
+      href="${issueUrl(p, i + 1)}" target="_blank" rel="noopener">
+      <span class="n">${opened.has(p.key) ? '✓' : i + 1}</span>
+      <span>${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]}) ${p.time}</span>
+      <span class="go-in">${opened.has(p.key) ? '열었음' : '열기'}</span>
+    </a></li>`;
+  }).join('');
+  for (const a of $('steps').querySelectorAll('[data-k]')) {
+    a.onclick = () => { opened.add(a.dataset.k); setTimeout(drawSteps, 60); };
+  }
+  $('progress').textContent = `· ${opened.size}/${list.length} 완료`;
+}
+
+function refresh() { drawDays(); drawPicked(); if (!$('submit').hidden) drawSteps(); save(); }
+
+$('go').onclick = () => {
+  opened = new Set();
+  $('submit').hidden = false;
+  drawSteps();
+  $('submit').scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+$('mylist').href = `https://github.com/${REPO}/issues?q=is%3Aissue+is%3Aopen+label%3Awatch-request`;
+$('prev').onclick = () => { cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1); drawDays(); };
+$('next').onclick = () => { cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1); drawDays(); };
+
+load();
+drawKinds(); drawTimes(); drawDow(); refresh();
+</script>
+</body>
+</html>
