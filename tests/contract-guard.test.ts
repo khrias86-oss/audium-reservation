@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CONTRACT, QUEUE_MARKERS, assertContractReady, isQueuePage, type AudeumContract,
+  CONTRACT, FLOW, FORM_FIELDS, ITEM_CLICK_COOLDOWN_MS, QUEUE_MARKERS,
+  assertContractReady, isQueuePage, type AudeumContract,
 } from '../src/adapters/audeum/contract.js';
 
 const filled: AudeumContract = {
@@ -19,7 +20,8 @@ describe('계약 준비 가드', () => {
   });
 
   it('미확인 항목을 이름으로 알려준다', () => {
-    expect(() => assertContractReady(CONTRACT)).toThrow(/slotPageUrl/);
+    // 8차 정찰로 대부분이 확정됐고, 지금 남은 것은 대기열 통과 비용뿐이다.
+    expect(() => assertContractReady(CONTRACT)).toThrow(/queueRetriesNeeded/);
   });
 
   it('일부만 채워져도 거부한다', () => {
@@ -30,14 +32,15 @@ describe('계약 준비 가드', () => {
     expect(() => assertContractReady(filled)).not.toThrow();
   });
 
-  it('아직 확정되지 않은 항목이 남아 있다 — M1 미완료 상태를 고정한다', () => {
-    expect(CONTRACT.rendering).toBeNull();
-    expect(CONTRACT.slotPageUrl).toBeNull();
+  it('대기열 통과 비용은 아직 미확정이다 — M1이 끝나지 않았음을 고정한다', () => {
+    // 6·8차는 1회 만에 통과했지만 혼잡 시간대 표본이 없어 폴링 예산의 근거로는 부족하다.
+    expect(CONTRACT.queueRetriesNeeded).toBeNull();
   });
 
   it('실측으로 확인된 항목은 이미 채워져 있다', () => {
-    // 정찰 2~3차에서 /booking이 티켓 종류 선택 페이지임을 확인했다.
     expect(CONTRACT.entryUrl).toBe('https://audeum.org/booking');
+    expect(CONTRACT.slotPageUrl).toBe('/booking/date');
+    expect(CONTRACT.soldOutSignal).toBe('예약가능한 시간이 아닙니다');
   });
 });
 
@@ -72,5 +75,30 @@ describe('대기열 판별', () => {
 
   it('지문이 비어 있지 않다 — 판별이 항상 false가 되는 사고를 막는다', () => {
     expect(QUEUE_MARKERS.length).toBeGreaterThan(0);
+  });
+});
+
+describe('예약 플로우 계약', () => {
+  it('전시와 렉처가 대칭 구조다', () => {
+    // 8차 정찰에서 확인: 두 상품이 같은 단계를 다른 경로로 밟는다.
+    expect(FLOW.exhibition.age).toBe('/booking/age');
+    expect(FLOW.lecture.age).toBe('/programs/age');
+    expect(FLOW.exhibition.date).toBe('/booking/date');
+    expect(FLOW.lecture.date).toBe('/programs/date');
+  });
+
+  it('제출 엔드포인트가 날짜 조회와 분리되어 있다', () => {
+    // 여석 확인은 date로 끝난다. payment를 건드리지 않고도 감시가 가능하다는 뜻이고,
+    // 이것이 DRY_RUN 게이트를 실효성 있게 만든다.
+    expect(FLOW.exhibition.date).not.toBe(FLOW.exhibition.payment);
+  });
+
+  it('상품 클릭 쿨다운이 사이트 구현과 일치한다', () => {
+    // 사이트가 setTimeout(...,3000)으로 3초간 재클릭을 무시한다.
+    expect(ITEM_CLICK_COOLDOWN_MS).toBe(3_000);
+  });
+
+  it('제출 버튼 셀렉터가 기록되어 있다 — 클릭 금지 대상을 특정하기 위해서다', () => {
+    expect(FORM_FIELDS.submitButton).toBe('#btn_reserve');
   });
 });

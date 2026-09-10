@@ -135,13 +135,73 @@ NetFunnel_Action({action_id: "act_3"}, function () { programs.selDate(seq); });
 
 **주의:** 도슨트 투어 예약은 `resType`이 `TOUR`일 가능성이 높으나 미확인이다.
 
+## 🎯 8차 정찰: 엔드포인트와 매진 로직 확보
+
+인라인 스크립트에서 계약의 대부분을 추출했다. **전시와 렉처가 대칭 구조**다.
+
+### 엔드포인트
+
+| 단계 | 전시(도슨트) | 렉처 | 주입 대상 |
+|---|---|---|---|
+| ① 연령·인원 | `/booking/age` | `/programs/age` | `.exhibition-wrapper` |
+| ② **날짜·회차** | **`/booking/date`** | `/programs/date` | `.exhibition-date-wrapper` |
+| ③ 제출 | `/booking/payment` | `/programs/payment` | `.payment-form` |
+
+응답은 **JSON이 아니라 HTML 조각**이며 해당 컨테이너에 `.html(e)`로 주입된다.
+
+### 전체 플로우 (전시 기준)
+
+```
+/booking (부모 — booking 전역 객체 보유)
+  └─ .exhibition-item.exhibition 클릭 (숨은 <seq>=1)
+       └─ POST /booking/age              → .exhibition-wrapper
+            └─ NetFunnel_Action(act_3)   ← 대기열 게이트
+                 └─ booking.selDate(seq)
+                      └─ POST /booking/date        → .exhibition-date-wrapper
+                           └─ bookingDate.selTime(spectateDate)
+                                └─ POST /booking/payment → .payment-form
+```
+
+- 상품 클릭은 **3초 쿨다운**이 걸려 있다 (`isClick` 플래그 + `setTimeout 3000`)
+- `NetFunnel_Complete()` 로 게이트를 닫는다
+
+### 사이트 소스가 알려준 매진 로직
+
+사이트 자체 주석이 판별 방식을 그대로 설명한다.
+
+```js
+//4) 시간을 선택하면 매진 여부를 체크하고 예약정보 확인 및 결제화면 보이기
+//매진시 재조회
+//예약 가능한 경우만 값 셋팅
+//예약가능한 시간이 아닌경우
+com.msg("예약가능한 시간이 아닙니다.");
+```
+
+**핵심:** 매진 판별은 **회차(시간) 선택 시점**에 이루어지고, 매진이면 **재조회**한다.
+즉 날짜 목록에 회차가 보인다고 예약 가능한 것이 아니다 — 시간을 고른 뒤에야 확정된다.
+`"예약가능한 시간이 아닙니다."` 는 매진/마감을 알리는 확실한 문자열 신호다.
+
+### 상태 변수와 폼 필드
+
+| 이름 | 역할 |
+|---|---|
+| `booking.spectateDate` / `programs.spectateDate` | 선택된 관람일 |
+| `booking.spectateTime` / `programs.spectateTime` | 선택된 회차 |
+| `btn_reserve` | **제출 버튼 — 절대 클릭하지 않는다** |
+| `input_spectatorNm` | 예약자 이름 |
+| `input_spectatorEmail` | 예약자 이메일 |
+| `txt_reserveTime` | 표시용 "날짜. 회차" |
+| `txt_reserveUserCnt`, `txt_reserveFee`, `txt_reserveNm` | 표시용 |
+
+예약자 입력이 **이름과 이메일뿐**으로 보인다 — 본인인증 단계는 아직 발견되지 않았다.
+
 ## 아직 확인하지 못한 것 (계약의 핵심)
 
-- `selDate` 가 호출하는 날짜 조회 엔드포인트 (7차 정찰에서 스크립트 전문 확보 예정)
-- 회차·잔여석 응답 형식과 매진 표기
-- NetFunnel 게이트를 코드에서 어떻게 통과하는가 (토큰? 폴링?)
-- 예약 제출 엔드포인트와 필수 필드
-- 본인인증 요구 여부
+- **`/booking/date` 응답 HTML의 구조** — 날짜·회차가 어떤 마크업으로 오는지 (9차 목표)
+- 매진 회차가 DOM에서 어떻게 구분되는지 (disabled? 클래스? 클릭 후에만 판별?)
+- `/booking/age`·`/booking/date` 의 **필수 POST 파라미터**
+- NetFunnel 게이트를 자동화에서 통과하는 방법
+- 본인인증 요구 여부 (현재까지는 이름·이메일만 확인됨)
 - 회차별 잔여석을 어떻게 표기하는가
 - 매진을 무엇으로 판별하는가
 - 예약 폼 필드와 제출 방식
