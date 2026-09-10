@@ -95,7 +95,9 @@ async function main() {
     const r = await post('/booking/time', timeBody);
     log(`POST /booking/time → ${r.status}, ${r.text.length}자, **${r.ms}ms**`);
     const slots = [...r.text.matchAll(/<spectate_time[^>]*>([^<]+)</g)].map((m) => m[1].trim());
-    const soldOut = (r.text.match(/disabled-time-slots/g) ?? []).length;
+    // 클래스가 붙은 자리만 센다. 조각 끝의 클릭 핸들러에도 같은 문자열이 나오므로
+    // 단순히 세면 실제보다 많이 나온다 (1차 프로브가 회차 1개에 매진 2개로 나온 이유).
+    const soldOut = (r.text.match(/class="[^"]*disabled-time-slots/g) ?? []).length;
     log(`회차 ${slots.length}개 (${slots.join(', ') || '없음'}), 그 중 매진 ${soldOut}개`);
     writeFileSync(`${OUT}/time-fragment.html`, r.text);
   } catch (e) {
@@ -114,7 +116,63 @@ async function main() {
     log(`날짜 조각 조회 실패: ${e.message}`);
   }
 
-  // --- 3. 예약 흐름 스크립트 — 여기에 제출 계약이 들어 있다 ---
+  // --- 3. 앱 번들 — 예약 흐름을 굴리는 booking 객체가 여기 있다 ---
+  //
+  // 1차 프로브에서 조각들의 인라인 스크립트를 뒤졌지만 `booking.selPayment` 정의가
+  // 없었다. 조각의 스크립트는 그 조각의 클릭 핸들러만 갖고 있고, 흐름 자체는
+  // Angular 앱 번들에 컴파일되어 있다. 번들은 압축돼 있어도 **문자열 리터럴은
+  // 살아남는다** — 엔드포인트 경로와 파라미터 이름이 거기 그대로 있다.
+  //
+  // 공개된 정적 파일을 읽을 뿐이므로 사이트에 어떤 부담도 주지 않고, 제출과도 무관하다.
+  log('\n## 3 — 앱 번들에서 제출 계약 찾기\n');
+  try {
+    const shell = await fetch(`${ORIGIN}/booking`, { signal: AbortSignal.timeout(20_000) });
+    const shellHtml = await shell.text();
+    writeFileSync(`${OUT}/booking-shell.html`, shellHtml);
+
+    const srcs = [...shellHtml.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((m) => m[1]);
+    log(`번들 후보 ${srcs.length}개: ${srcs.map((s) => `\`${s}\``).join(', ') || '(없음)'}`);
+
+    for (const src of srcs) {
+      const url = src.startsWith('http') ? src : `${ORIGIN}/${src.replace(/^\//, '')}`;
+      if (!url.startsWith(ORIGIN)) continue; // 외부 스크립트는 우리 관심사가 아니다
+      let code = '';
+      try {
+        const r = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+        code = await r.text();
+      } catch (e) {
+        log(`- ${url} 실패: ${e.message}`);
+        continue;
+      }
+      log(`\n### ${url} — ${code.length}자`);
+      writeFileSync(`${OUT}/bundle-${url.split('/').pop()}`, code);
+
+      // 예약 흐름 경로가 나오는 자리를 앞뒤 맥락과 함께 보여준다.
+      // 압축된 코드는 줄바꿈이 없으므로 문자 단위로 잘라야 읽을 수 있다.
+      const hits = [];
+      for (const m of code.matchAll(/["'](\/(?:booking|programs)\/[a-zA-Z]+)["']/g)) {
+        const at = m.index ?? 0;
+        hits.push({ path: m[1], ctx: code.slice(Math.max(0, at - 420), at + 420) });
+      }
+      const byPath = new Map();
+      for (const h of hits) if (!byPath.has(h.path)) byPath.set(h.path, h.ctx);
+      for (const [path, ctx] of byPath) {
+        log(`\n**\`${path}\`**`);
+        log('```js\n' + ctx.replace(/`/g, "'") + '\n```');
+      }
+
+      for (const kw of ['spectatorNm', 'seqExhibitionReserve', 'NetFunnel', 'reserveComplete']) {
+        const at = code.indexOf(kw);
+        if (at === -1) continue;
+        log(`\n**\`${kw}\` 주변**`);
+        log('```js\n' + code.slice(Math.max(0, at - 500), at + 500).replace(/`/g, "'") + '\n```');
+      }
+    }
+  } catch (e) {
+    log(`번들 조사 실패: ${e.message}`);
+  }
+
+  // --- 3b. 조각의 인라인 스크립트 ---
   log('\n## 3 — 예약 흐름 스크립트 (제출 엔드포인트를 찾는다)\n');
   const fragments = [
     ['/booking/exhbition', 'locale=ko&language=ko'],
