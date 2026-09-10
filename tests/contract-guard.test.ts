@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { CONTRACT, assertContractReady, type AudeumContract } from '../src/adapters/audeum/contract.js';
+import {
+  CONTRACT, QUEUE_MARKERS, assertContractReady, isQueuePage, type AudeumContract,
+} from '../src/adapters/audeum/contract.js';
 
 const filled: AudeumContract = {
+  entryUrl: 'https://example.invalid/booking',
   rendering: 'SPA',
-  monthEndpoint: 'https://example.invalid/month',
-  slotEndpoint: 'https://example.invalid/slots',
+  slotPageUrl: 'https://example.invalid/slots',
   submitEndpoint: 'https://example.invalid/submit',
   soldOutSignal: 'remain === 0',
+  queueRetriesNeeded: 2,
 };
 
 describe('계약 준비 가드', () => {
@@ -16,7 +19,7 @@ describe('계약 준비 가드', () => {
   });
 
   it('미확인 항목을 이름으로 알려준다', () => {
-    expect(() => assertContractReady(CONTRACT)).toThrow(/monthEndpoint/);
+    expect(() => assertContractReady(CONTRACT)).toThrow(/slotPageUrl/);
   });
 
   it('일부만 채워져도 거부한다', () => {
@@ -27,7 +30,47 @@ describe('계약 준비 가드', () => {
     expect(() => assertContractReady(filled)).not.toThrow();
   });
 
-  it('현재 저장소의 계약은 아직 비어 있다 — M1 미완료 상태를 명시적으로 고정한다', () => {
+  it('아직 확정되지 않은 항목이 남아 있다 — M1 미완료 상태를 고정한다', () => {
     expect(CONTRACT.rendering).toBeNull();
+    expect(CONTRACT.slotPageUrl).toBeNull();
+  });
+
+  it('실측으로 확인된 항목은 이미 채워져 있다', () => {
+    // 정찰 2~3차에서 /booking이 티켓 종류 선택 페이지임을 확인했다.
+    expect(CONTRACT.entryUrl).toBe('https://audeum.org/booking');
+  });
+});
+
+describe('대기열 판별', () => {
+  // 5차 정찰에서 실제로 받은 페이지의 문구다.
+  const realQueuePage =
+    '동시접속자가 많아 잠시 대기 중입니다.\n' +
+    'We are currently experiencing a high volume of traffic.\n' +
+    'Please give us a moment.\n새로고침\n(Refresh)';
+
+  it('실제로 관측한 대기열 페이지를 인식한다', () => {
+    expect(isQueuePage(realQueuePage)).toBe(true);
+  });
+
+  it('한국어 문구만 있어도 인식한다', () => {
+    expect(isQueuePage('동시접속자가 많아 잠시 대기 중입니다.')).toBe(true);
+  });
+
+  it('영어 문구만 있어도 인식한다', () => {
+    // 사이트는 EN/KR을 전환할 수 있다. 한쪽만 봐서는 안 된다.
+    expect(isQueuePage('We are currently experiencing a high volume of traffic.')).toBe(true);
+  });
+
+  it('정상 예약 페이지를 대기열로 오판하지 않는다', () => {
+    expect(isQueuePage('Reserve\nSelect ticket\nEXHIBITIONS\nFREE')).toBe(false);
+  });
+
+  it('빈 문자열을 대기열로 보지 않는다', () => {
+    // 빈 응답은 대기열이 아니라 파싱 실패다. 둘은 다르게 처리돼야 한다.
+    expect(isQueuePage('')).toBe(false);
+  });
+
+  it('지문이 비어 있지 않다 — 판별이 항상 false가 되는 사고를 막는다', () => {
+    expect(QUEUE_MARKERS.length).toBeGreaterThan(0);
   });
 });
