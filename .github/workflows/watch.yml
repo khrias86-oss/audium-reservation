@@ -12,6 +12,11 @@ name: 🔔 오디움 빈자리 감시
 on:
   schedule:
     - cron: '*/10 22-23,0-14 * * *'
+  # watch-run 브랜치 푸시는 시험 실행용이다. workflow_dispatch는 워크플로가 기본
+  # 브랜치에 있어야만 동작하는데, 이 워크플로는 아직 병합 전이라 쓸 수 없다.
+  # 병합 후에는 이 트리거를 지워도 된다.
+  push:
+    branches: [watch-run]
   workflow_dispatch:
     inputs:
       dry_run:
