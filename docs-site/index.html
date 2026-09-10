@@ -95,6 +95,32 @@
   a.step.done { border-color: var(--pick); background: var(--pick-soft); }
   a.step .go-in { margin-left: auto; color: var(--muted); font-size: 13px; }
 
+  .setup { display: grid; gap: 10px; }
+  .setup input {
+    width: 100%; min-height: var(--tap); padding: 0 12px; font-size: 16px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--fg);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .setup .row { display: flex; gap: 8px; }
+  .btn {
+    min-height: var(--tap); padding: 0 16px; border: 1px solid var(--line); border-radius: 10px;
+    background: transparent; color: var(--fg); font-size: 15px; cursor: pointer;
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
+  .btn.grow { flex: 1; }
+  .ok { color: var(--pick); font-size: 13px; }
+  .bad { color: #c0392b; font-size: 13px; }
+  @media (prefers-color-scheme: dark) { .bad { color: #ff8a7a; } }
+  details summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 6px 0; }
+  details ol { padding-left: 20px; font-size: 13px; color: var(--muted); line-height: 1.7; }
+  details a { color: var(--pick); }
+
+  ul.live { list-style: none; padding: 0; margin: 0; }
+  ul.live li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  ul.live li:last-child { border-bottom: 0; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pick); flex: none; }
+  .dot.warn { background: var(--warn); }
+
   .bar {
     position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
     background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(12px);
@@ -152,6 +178,60 @@
      ↑ 를 눌러 순서를 올릴 수 있습니다.</p>
 </section>
 
+<section id="status">
+  <h2>지금 감시 중 <span id="livecount" style="font-weight:400"></span></h2>
+  <ul class="live" id="live"></ul>
+  <p class="empty" id="livenone">자동 등록을 켜면 여기에서 바로 확인할 수 있습니다.</p>
+</section>
+
+<section id="me">
+  <h2>내 예약 정보</h2>
+  <p class="note" style="margin:0 0 12px">
+    자리가 났을 때 <b>타이핑하지 않고 붙여넣기만</b> 하려고 미리 적어 두는 칸입니다.
+    <b>이 브라우저에만 저장되고 어디로도 전송되지 않습니다.</b>
+  </p>
+  <div class="setup">
+    <div class="row"><input id="myname" placeholder="이름 (예: 홍길동)" autocomplete="name">
+      <button class="btn" data-copy="myname">복사</button></div>
+    <div class="row"><input id="myemail" type="email" placeholder="이메일" autocomplete="email" inputmode="email">
+      <button class="btn" data-copy="myemail">복사</button></div>
+    <div class="row"><input id="myphone" type="tel" placeholder="휴대폰 (예: 01012345678)" autocomplete="tel" inputmode="tel">
+      <button class="btn" data-copy="myphone">복사</button></div>
+    <p class="note" style="margin:0">
+      💡 아이폰이라면 <b>설정 → Safari → 자동 완성 → 내 정보</b>에 연락처를 지정해 두세요.
+      오디움 예약 화면에서 이름·이메일·휴대폰이 <b>한 번에</b> 채워집니다. 이 칸보다 훨씬 빠릅니다.
+    </p>
+  </div>
+</section>
+
+<section id="auth">
+  <h2>자동 등록</h2>
+  <div class="setup">
+    <p class="note" id="authstate" style="margin:0"></p>
+    <input id="token" type="password" inputmode="text" autocomplete="off"
+           autocapitalize="off" autocorrect="off" spellcheck="false"
+           placeholder="github_pat_... 또는 ghp_...">
+    <div class="row">
+      <button class="btn primary grow" id="savetoken">연결하기</button>
+      <button class="btn" id="cleartoken">해제</button>
+    </div>
+    <details>
+      <summary>토큰 만드는 법 (한 번만 하면 됩니다)</summary>
+      <ol>
+        <li><a id="tokenlink" target="_blank" rel="noopener">GitHub 토큰 만들기 화면 열기</a></li>
+        <li><b>Repository access</b>에서 <b>Only select repositories</b> → 이 저장소를 고릅니다</li>
+        <li><b>Repository permissions</b> → <b>Issues</b> 를 <b>Read and write</b> 로 바꿉니다</li>
+        <li><b>Generate token</b> → 나온 값을 복사해 위 칸에 붙여넣습니다</li>
+      </ol>
+      <p class="note">
+        토큰은 <b>이 브라우저에만</b> 저장되고 <b>github.com 외에는 전송되지 않습니다.</b>
+        권한도 이 저장소의 신청서(Issues)를 읽고 쓰는 것뿐이라, 코드나 다른 저장소는
+        건드릴 수 없습니다. 언제든 <b>해제</b>를 누르면 지워집니다.
+      </p>
+    </details>
+  </div>
+</section>
+
 <section id="submit" hidden>
   <h2>신청서 <span id="progress" style="font-weight:400"></span></h2>
   <p class="note" style="margin:0 0 12px">
@@ -166,7 +246,7 @@
 </p>
 
 <div class="bar"><div class="inner">
-  <button class="go" id="go" disabled>감시 신청서 만들기</button>
+  <button class="go" id="go" disabled>감시 신청하기</button>
   <p class="hint" id="hint">회차와 날짜를 고르세요</p>
 </div></div>
 
@@ -358,18 +438,22 @@ function drawPicked() {
   $('count').textContent = list.length ? `${list.length}건` : '';
   $('go').disabled = list.length === 0;
   $('hint').textContent = list.length
-    ? `${list.length}건을 감시 신청합니다`
+    ? (token ? `누르면 ${list.length}건이 바로 등록됩니다` : `${list.length}건 — 신청서를 하나씩 열어야 합니다`)
     : (times.size === 0 ? '회차를 고르세요' : '달력에서 날짜를 고르세요');
 }
 
-function issueUrl(p, rank) {
-  const body = [
+function issueBody(p, rank) {
+  return [
     '### 관람 희망 날짜', '', p.date, '',
     '### 희망 회차', '', p.time, '',
     '### 관람 종류', '', KINDS.find(([v]) => v === kind)[1], '',
     '### 우선순위', '', String(Math.min(rank, 4)), '',
     '### 확인', '', '- [X] 본인 명의로 예약하며, 가지 못하게 되면 즉시 취소하겠습니다.',
   ].join('\n');
+}
+
+function issueUrl(p, rank) {
+  const body = issueBody(p, rank);
   return `https://github.com/${REPO}/issues/new?labels=watch-request`
     + `&title=${encodeURIComponent(`[감시] ${p.date} ${p.time}`)}`
     + `&body=${encodeURIComponent(body)}`;
@@ -403,9 +487,202 @@ function drawSteps() {
   $('progress').textContent = `· ${opened.size}/${list.length} 완료`;
 }
 
-function refresh() { drawDays(); drawPicked(); if (!$('submit').hidden) drawSteps(); save(); }
+function refresh() {
+  drawDays(); drawPicked();
+  if (!$('submit').hidden) drawSteps();
+  save();
+}
+
+/* ────────────────────────── 자동 등록 ──────────────────────────
+ *
+ * 처음에는 미리 채워진 GitHub 주소를 열어 사용자가 직접 제출하게 했다.
+ * 그 방식이 조용히 실패했다 — GitHub 모바일 웹은 주소에 담아 보낸
+ * `?labels=` 를 그리지도, 적용하지도 않는다. 제목과 본문은 채워지므로
+ * 사용자 눈에는 정상으로 보이고, 감시 쪽은 그 신청을 영원히 못 봤다.
+ *
+ * 감시 쪽은 라벨에 의존하지 않도록 이미 고쳤지만, 근본 문제는 남는다.
+ * 신청 한 건마다 사람이 화면을 옮겨다니며 눌러야 한다는 것.
+ *
+ * 그래서 토큰을 한 번 받아 두고 API로 직접 만든다. 토큰은 이 브라우저의
+ * localStorage에만 있고 api.github.com 외에는 나가지 않는다. 권한도 이
+ * 저장소의 Issues 하나뿐이라, 새어 나가더라도 할 수 있는 일이 신청서를
+ * 읽고 쓰는 것으로 한정된다.
+ */
+
+const TOKEN_KEY = 'audeum.token';
+let token = null;
+try { token = localStorage.getItem(TOKEN_KEY); } catch { /* 저장이 막힌 브라우저 */ }
+
+const api = (path, init = {}) =>
+  fetch(`https://api.github.com/repos/${REPO}${path}`, {
+    ...init,
+    headers: {
+      accept: 'application/vnd.github+json',
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+      ...(init.headers || {}),
+    },
+  });
+
+function setAuthState(text, cls) {
+  const el = $('authstate');
+  el.textContent = text;
+  el.className = cls ? cls : 'note';
+}
+
+async function connect(candidate) {
+  const previous = token;
+  token = candidate;
+  setAuthState('확인 중…');
+  let res;
+  try {
+    res = await api('');
+  } catch {
+    token = previous;
+    setAuthState('인터넷 연결을 확인해 주세요.', 'bad');
+    return false;
+  }
+  if (!res.ok) {
+    token = previous;
+    // 401은 토큰이 틀린 것, 404는 이 저장소에 권한이 없는 것이다.
+    // 둘을 뭉뚱그리면 사용자가 어디를 고쳐야 할지 알 수 없다.
+    setAuthState(
+      res.status === 401 ? '토큰이 올바르지 않습니다. 다시 복사해 주세요.'
+      : res.status === 404 ? '이 저장소에 대한 권한이 없습니다. 토큰을 만들 때 저장소를 골랐는지 확인해 주세요.'
+      : `연결하지 못했습니다 (오류 ${res.status})`,
+      'bad',
+    );
+    return false;
+  }
+  try { localStorage.setItem(TOKEN_KEY, token); } catch { /* 저장이 막혀도 이번 세션은 동작한다 */ }
+  setAuthState('✅ 연결됨 — 이제 버튼 한 번으로 등록됩니다.', 'ok');
+  $('token').value = '';
+  await loadLive();
+  drawPicked();
+  return true;
+}
+
+$('savetoken').onclick = () => {
+  const value = $('token').value.trim();
+  if (!value) { setAuthState('토큰을 붙여넣어 주세요.', 'bad'); return; }
+  void connect(value);
+};
+
+$('cleartoken').onclick = () => {
+  token = null;
+  try { localStorage.removeItem(TOKEN_KEY); } catch { /* 이미 없으면 그만이다 */ }
+  setAuthState('해제했습니다. 링크를 눌러 직접 등록하는 방식으로 돌아갑니다.');
+  $('live').innerHTML = '';
+  $('livenone').hidden = false;
+  $('livecount').textContent = '';
+  drawPicked();
+};
+
+$('tokenlink').href = 'https://github.com/settings/personal-access-tokens/new';
+
+/** 지금 감시 중인 신청서를 보여준다. "돌고 있나?"에 답하는 화면이다. */
+async function loadLive() {
+  if (!token) { $('livenone').hidden = false; return; }
+  let issues;
+  try {
+    const res = await api('/issues?state=open&per_page=100');
+    if (!res.ok) throw new Error(String(res.status));
+    issues = await res.json();
+  } catch {
+    $('livenone').hidden = false;
+    $('livenone').textContent = '감시 현황을 불러오지 못했습니다.';
+    return;
+  }
+
+  // 신청서와 알림을 나눈다. 감시 쪽과 같은 규칙으로 판별해야 화면과 실제가 어긋나지 않는다.
+  const rows = [];
+  for (const it of issues) {
+    const labels = (it.labels || []).map((l) => (typeof l === 'string' ? l : l.name));
+    const body = it.body || '';
+    if (labels.includes('audeum-alert')) {
+      rows.push({ alert: true, title: it.title, url: it.html_url });
+    } else if (body.includes('### 관람 희망 날짜') || (it.title || '').startsWith('[감시]')) {
+      const date = (body.match(/### 관람 희망 날짜\s*\n+([^\n]+)/) || [])[1];
+      const time = (body.match(/### 희망 회차\s*\n+([^\n]+)/) || [])[1];
+      rows.push({ alert: false, date: (date || '').trim(), time: (time || '').trim(), url: it.html_url, number: it.number });
+    }
+  }
+
+  rows.sort((a, b) => Number(b.alert) - Number(a.alert));
+  $('live').innerHTML = rows.map((r) => r.alert
+    ? `<li><span class="dot warn"></span><a href="${r.url}" target="_blank" rel="noopener">${r.title}</a></li>`
+    : `<li><span class="dot"></span><span style="flex:1">${r.date} ${r.time}</span>
+         <a href="${r.url}" target="_blank" rel="noopener" style="color:var(--muted);font-size:13px">#${r.number}</a></li>`
+  ).join('');
+
+  const watching = rows.filter((r) => !r.alert).length;
+  $('livecount').textContent = watching ? `${watching}건` : '';
+  $('livenone').hidden = rows.length > 0;
+  $('livenone').textContent = token
+    ? '감시 중인 신청이 없습니다. 아래에서 골라 등록하세요.'
+    : '자동 등록을 켜면 여기에서 바로 확인할 수 있습니다.';
+}
+
+/** 이미 같은 날짜·회차를 감시 중인지. 중복 신청을 만들지 않는다. */
+async function existingKeys() {
+  const keys = new Set();
+  try {
+    const res = await api('/issues?state=open&per_page=100');
+    if (!res.ok) return keys;
+    for (const it of await res.json()) {
+      const body = it.body || '';
+      const date = (body.match(/### 관람 희망 날짜\s*\n+([^\n]+)/) || [])[1];
+      const time = (body.match(/### 희망 회차\s*\n+([^\n]+)/) || [])[1];
+      if (date && time) keys.add(`${date.trim()}|${time.trim()}`);
+    }
+  } catch { /* 못 읽으면 중복 검사만 생략한다 — 등록 자체는 막지 않는다 */ }
+  return keys;
+}
+
+async function registerAll() {
+  const list = picks();
+  $('submit').hidden = false;
+  const already = await existingKeys();
+  const results = [];
+
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
+    if (already.has(p.key)) { results.push({ p, state: 'dup' }); drawResults(results, list.length); continue; }
+    try {
+      const res = await api('/issues', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: `[감시] ${p.date} ${p.time}`,
+          body: issueBody(p, i + 1),
+          labels: ['watch-request'],
+        }),
+      });
+      results.push({ p, state: res.ok ? 'ok' : 'fail', code: res.status });
+    } catch {
+      results.push({ p, state: 'fail' });
+    }
+    drawResults(results, list.length);
+  }
+
+  await loadLive();
+  $('status').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function drawResults(results, total) {
+  const mark = { ok: '✅ 등록됨', dup: '이미 감시 중', fail: '⚠️ 실패' };
+  $('progress').textContent = `· ${results.length}/${total}`;
+  $('steps').innerHTML = results.map((r) => {
+    const d = new Date(r.p.date + 'T00:00:00');
+    return `<li><div class="step ${r.state === 'fail' ? '' : 'done'}">
+      <span class="n">${r.state === 'fail' ? '!' : '✓'}</span>
+      <span>${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]}) ${r.p.time}</span>
+      <span class="go-in">${mark[r.state]}${r.code ? ` (${r.code})` : ''}</span>
+    </div></li>`;
+  }).join('');
+}
 
 $('go').onclick = () => {
+  if (token) { void registerAll(); return; }
   opened = new Set();
   $('submit').hidden = false;
   drawSteps();
@@ -416,8 +693,38 @@ $('mylist').href = `https://github.com/${REPO}/issues?q=is%3Aissue+is%3Aopen+lab
 $('prev').onclick = () => { cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1); drawDays(); };
 $('next').onclick = () => { cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1); drawDays(); };
 
+/* 예약 정보 — 이 브라우저에만 남는다. 커밋되지도, 전송되지도 않는다. */
+const ME = ['myname', 'myemail', 'myphone'];
+for (const id of ME) {
+  try { $(id).value = localStorage.getItem(`audeum.${id}`) || ''; } catch { /* 저장이 막힌 브라우저 */ }
+  $(id).oninput = () => {
+    try { localStorage.setItem(`audeum.${id}`, $(id).value); } catch { /* 이번 세션만 유지된다 */ }
+  };
+}
+for (const b of document.querySelectorAll('[data-copy]')) {
+  b.onclick = async () => {
+    const value = $(b.dataset.copy).value;
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      const was = b.textContent;
+      b.textContent = '복사됨';
+      setTimeout(() => { b.textContent = was; }, 1200);
+    } catch {
+      // 클립보드가 막히면(구형 사파리, 비보안 컨텍스트) 선택해 주는 것까지가 최선이다.
+      $(b.dataset.copy).select();
+    }
+  };
+}
+
+setAuthState(token
+  ? '✅ 연결됨 — 버튼 한 번으로 등록됩니다.'
+  : '아직 연결되지 않았습니다. 지금은 신청서를 하나씩 눌러 열어야 합니다.',
+  token ? 'ok' : 'note');
+
 load();
 drawKinds(); drawTimes(); drawDow(); refresh();
+void loadLive();
 </script>
 </body>
 </html>
