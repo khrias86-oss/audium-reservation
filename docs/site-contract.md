@@ -77,11 +77,71 @@ Please give us a moment.
 - 자동 예약도 대기열을 통과해야 하므로, 감지 후 즉시 예약이 실패할 수 있다.
   재시도 로직이 대기열을 인식해야 한다.
 
+## 🔓 6차 정찰 돌파: 한국어 로케일이 실물을 열었다
+
+브라우저 로케일을 `ko-KR`로 설정하자 페이지가 실제 마크업을 반환했다.
+2~5차가 "빈 껍데기"를 본 것은 로케일 문제였을 가능성이 크다.
+
+### 이 페이지들은 페이지가 아니라 AJAX 파셜이다
+
+`/booking/exhbition`과 `/programs/booking`은 **부모 페이지 `/booking`에 주입되는
+HTML 조각**이다. 그래서 제목이 비어 있고 본문이 17~24자였다. 콘솔의
+`booking is not defined` 오류가 결정적 증거다 — 조각을 단독으로 열어 부모의
+전역 객체가 없었던 것이다.
+
+**6회 실행 내내 JSON이 0건이었던 이유도 이것이다.** 이 플로우는 JSON API가 아니라
+HTML 조각을 주고받는다. 찾을 API가 애초에 없었다.
+
+### 기술 스택
+
+- **Angular** (`ng-star-inserted`) + **Clarity Design System** (`clr-col-*`, `cds-icon`)
+- **jQuery** 기반 AJAX 플로우 (인라인 스크립트)
+- 서버: nginx/1.24.0
+
+### 대기열의 정체: NetFunnel
+
+```js
+NetFunnel_Action({action_id: "act_3"}, function () { programs.selDate(seq); });
+```
+
+대기열은 자체 구현이 아니라 **NetFunnel**(한국 트래픽 제어 솔루션)이다.
+중요한 것은 **대기열이 사이트 앞단이 아니라 예약 플로우 *안에* 있다**는 점이다 —
+연령 선택 후 날짜 조회 직전에 게이트가 걸린다.
+
+### 확인된 예약 플로우
+
+```
+/booking (부모)
+  └─ 상품 선택 (.exhibition-item 클릭, 숨겨진 <seq>에서 id 추출)
+       └─ POST /programs/age          → .exhibition-wrapper 에 주입
+            └─ NetFunnel_Action(act_3) ← 대기열 게이트
+                 └─ selDate(seq)      → .exhibition-date-wrapper 에 주입
+                      └─ (회차·잔여석) → .payment-form
+```
+
+### 확인된 식별자
+
+| 항목 | 값 |
+|---|---|
+| 전시(정음: 소리의 여정) `seq` | **1** |
+| 렉처(프랑스 소리의 역사) `seq` | **7** |
+| `resType` 종류 | `LECTURE`, `PERFORMANCE`, `TOUR`, `WORKSHOP` |
+| 확인된 엔드포인트 | `POST /programs/age` |
+| NetFunnel action_id | `act_3` |
+| 인원 파라미터 | `normalCount`, `youthCount`, `seniorCount` (+ 성별 체크박스) |
+| DOM 컨테이너 | `.exhibition-wrapper`(연령), `.exhibition-date-wrapper`(날짜), `.payment-form`(결제) |
+| 상품 목록 셀렉터 | `.exhibition-list-container .exhibition-item.program` / `.exhibition` |
+| 선택 표시 | `.selected` 클래스 + `.selected-indicator` |
+
+**주의:** 도슨트 투어 예약은 `resType`이 `TOUR`일 가능성이 높으나 미확인이다.
+
 ## 아직 확인하지 못한 것 (계약의 핵심)
 
-- 캘린더 UI가 어디에 있는가 — **대기열을 통과한 뒤에야 볼 수 있을 것으로 보임**
-- 대기열 통과 방법 (새로고침 반복? 대기 토큰? 쿠키?)
-- 대기열이 상시인지, 특정 시간대에만 있는지
+- `selDate` 가 호출하는 날짜 조회 엔드포인트 (7차 정찰에서 스크립트 전문 확보 예정)
+- 회차·잔여석 응답 형식과 매진 표기
+- NetFunnel 게이트를 코드에서 어떻게 통과하는가 (토큰? 폴링?)
+- 예약 제출 엔드포인트와 필수 필드
+- 본인인증 요구 여부
 - 회차별 잔여석을 어떻게 표기하는가
 - 매진을 무엇으로 판별하는가
 - 예약 폼 필드와 제출 방식
