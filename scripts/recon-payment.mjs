@@ -139,7 +139,25 @@ async function main() {
     log(`인라인 스크립트 ${inline.length}자, 외부 스크립트 후보 확인 중\n`);
     writeFileSync(`${OUT}/booking-inline.js`, inline);
 
-    const sources = [['(페이지 인라인)', inline]];
+    const sources = [['(/booking 인라인)', inline]];
+
+    // /booking 의 인라인 스크립트는 1,011자짜리 NetFunnel 게이트 하나뿐이었다.
+    // 11차 정찰이 센 20,473자는 조각들이 주입된 **렌더 후** DOM의 것이었으므로,
+    // 흐름을 굴리는 `booking` 객체는 조각을 내려주는 다른 문서에 있다.
+    // 그 후보를 문서로 직접 받아 본다 — 조회일 뿐 제출과 무관하다.
+    for (const path of ['/booking/exhbition', '/programs/booking', '/booking/date', '/booking/age']) {
+      try {
+        const r = await fetch(`${ORIGIN}${path}`, {
+          headers: { referer: `${ORIGIN}/booking` },
+          signal: AbortSignal.timeout(20_000),
+        });
+        const html = await r.text();
+        writeFileSync(`${OUT}/doc${path.replace(/\//g, '-')}.html`, html);
+        sources.push([`GET ${path} (${r.status})`, scripts(html).join('\n')]);
+      } catch (e) {
+        log(`- GET ${path} 실패: ${e.message}`);
+      }
+    }
 
     const srcs = [...shellHtml.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((m) => m[1]);
     log(`외부 스크립트 ${srcs.length}개: ${srcs.map((x) => `\`${x}\``).join(', ') || '(없음)'}`);
@@ -171,14 +189,14 @@ async function main() {
       }
 
       // 이름으로 흐름 함수를 통째로 꺼낸다. 압축돼 있어도 중괄호는 셀 수 있다.
-      for (const name2 of ['selPayment', 'selTime', 'reserve = function', 'fn_reserve', 'insertReserve']) {
+      for (const name2 of ['selPayment', 'selTime', 'selDate', 'reserve = function', 'fn_reserve', 'insertReserve']) {
         const body = functionBody(code, name2);
         if (!body) continue;
         log(`\n**\`${name2}\` 정의**`);
         log('```js\n' + body.slice(0, 2200).replace(/`/g, "'") + '\n```');
       }
 
-      for (const kw of ['spectatorNm', 'spectatorEmail', 'seqExhibitionReserve', 'btn_reserve', 'netfunnelId']) {
+      for (const kw of ['spectatorNm', 'spectatorEmail', 'seqExhibitionReserve', 'btn_reserve', 'com.submit', 'var booking']) {
         const at = code.indexOf(kw);
         if (at === -1) continue;
         log(`\n**\`${kw}\` 주변**`);
@@ -227,21 +245,42 @@ async function main() {
     log('건너뜀. `PROBE_PAYMENT_FORM=1`을 명시해야 실행된다.');
     log('이 호출은 화면을 그릴 뿐 예약을 만들지 않지만, 예약 흐름에 한 걸음 더 들어가므로 기본값은 끔이다.');
   } else {
-    const seq = process.env.PROBE_RESERVE_SEQ ?? '';
+    // 회차 조각에서 seq를 그대로 뽑아 쓴다. 사람이 손으로 옮겨 적으면 틀린 회차를
+    // 가리킬 수 있고, 그건 예약 흐름에서 가장 위험한 종류의 실수다.
+    let seq = process.env.PROBE_RESERVE_SEQ ?? '';
+    let date = today;
     if (!seq) {
-      log('`PROBE_RESERVE_SEQ`(회차의 seq_reserve 값)가 필요하다. 건너뛴다.');
+      const probe = await post('/booking/time', timeBody).catch(() => null);
+      const m = probe?.text.match(/<seq_reserve[^>]*>([^<]+)</);
+      seq = m ? m[1].trim() : '';
+      log(seq ? `회차 조각에서 seq_reserve=${seq} (${date}) 를 얻었다.` : '회차가 없어 seq를 얻지 못했다.');
+    }
+
+    if (!seq) {
+      log('회차가 없는 날이라 결제 화면을 열 수 없다. 관람일이 있는 날 다시 돌린다.');
     } else {
-      try {
-        const r = await post('/booking/payment', `locale=ko&seqExhibitionReserve=${seq}&seqExhibition=1&language=ko`);
+      // 파라미터 이름을 모르므로 사이트가 쓸 법한 조합을 순서대로 시도한다.
+      // 어느 것도 예약을 만들지 않는다 — 결제 **화면**을 그리는 호출이다.
+      const attempts = [
+        `locale=ko&seqExhibitionReserve=${seq}&seqExhibition=1&spectateDate=${date}&language=ko`,
+        `locale=ko&seqReserve=${seq}&seqExhibition=1&spectateDate=${date}&language=ko`,
+        `locale=ko&seq=${seq}&seqExhibition=1&language=ko`,
+      ];
+      for (const body of attempts) {
+        let r;
+        try { r = await post('/booking/payment', body); }
+        catch (e) { log(`- \`${body}\` → 실패: ${e.message}`); continue; }
+
+        log(`\n#### \`${body}\` → ${r.status}, ${r.text.length}자`);
+        if (r.status !== 200 || r.text.length < 200) { log('- 빈 응답. 다음 조합을 시도한다.'); continue; }
+
         writeFileSync(`${OUT}/payment-fragment.html`, r.text);
-        log(`POST /booking/payment → ${r.status}, ${r.text.length}자`);
         const src = scripts(r.text).join('\n');
-        log(`스크립트 ${src.length}자`);
-        for (const c of [...new Set(requestCalls(src))]) log('```js\n' + c.trim().slice(0, 900) + '\n```');
         const ids = [...new Set([...r.text.matchAll(/id=["']([^"']+)["']/g)].map((m) => m[1]))];
-        log(`\n입력 요소 id: ${ids.map((i) => `\`${i}\``).join(', ') || '(없음)'}`);
-      } catch (e) {
-        log(`결제 조각 조회 실패: ${e.message}`);
+        log(`입력 요소 id: ${ids.map((i) => `\`${i}\``).join(', ') || '(없음)'}`);
+        log(`\n**결제 조각 스크립트 ${src.length}자**`);
+        log('```js\n' + src.slice(0, 6000).replace(/`/g, "'") + '\n```');
+        break; // 통한 조합을 찾았으면 더 두드리지 않는다
       }
     }
   }
