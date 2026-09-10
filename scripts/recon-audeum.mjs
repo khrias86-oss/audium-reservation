@@ -206,6 +206,25 @@ async function main() {
       log('```');
     }
 
+    // 6차에서 드러난 것: 이 페이지들은 jQuery + AJAX 파셜이고, 인라인 스크립트에
+    // 엔드포인트·필드명·플로우가 전부 들어 있다. JSON API가 없는 이유도 이것이다.
+    // 스크립트를 통째로 덤프하는 것이 계약을 얻는 가장 빠른 길이다.
+    const inlineScripts = await page.$$eval('script:not([src])', (els) =>
+      els.map((el) => el.textContent ?? '').filter((t) => t.trim().length > 50),
+    ).catch(() => []);
+
+    if (inlineScripts.length) {
+      log(`인라인 스크립트 ${inlineScripts.length}개 (총 ${inlineScripts.reduce((n, t) => n + t.length, 0)}자):`);
+      for (const [i, script] of inlineScripts.entries()) {
+        log(`\n#### 스크립트 ${i + 1} (${script.length}자)`);
+        log('```js');
+        log(script.slice(0, 12_000).replace(/\n{3,}/g, '\n\n'));
+        if (script.length > 12_000) log(`\n... (${script.length - 12_000}자 생략, 아티팩트 참조)`);
+        log('```');
+      }
+      writeFileSync(`${OUT}/${slug}-scripts.js`, inlineScripts.join('\n\n/* ─── 다음 스크립트 ─── */\n\n'));
+    }
+
     if (consoleErrors.length) {
       log(`JS 오류 ${consoleErrors.length}건: ${consoleErrors.slice(0, 5).join(' | ')}`);
       consoleErrors.length = 0;
