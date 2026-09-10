@@ -47,8 +47,16 @@ export const FLOW = {
   exhibition: {
     /** 연령·인원 선택 조각 */
     age: '/booking/age',
-    /** 날짜·회차 조각 — 여석 판단의 근거가 여기서 온다 */
+    /** 날짜 목록 조각 */
     date: '/booking/date',
+    /**
+     * 회차 조각 — **여석 판단의 근거가 여기서 온다.**
+     *
+     * 9차 정찰에서 실제로 클릭해 흐름을 따라가다 발견했다. 8차의 스크립트 추출은
+     * 이 단계를 잡지 못했는데, 날짜를 고른 뒤에야 호출되기 때문이다.
+     * 사이트 주석("시간을 선택하면 매진 여부를 체크")과도 맞아떨어진다.
+     */
+    time: '/booking/time',
     /** 제출. **자동화에서 호출하지 않는다** */
     payment: '/booking/payment',
     /** 상품 목록에서 이 항목을 고른다 */
@@ -57,6 +65,8 @@ export const FLOW = {
   lecture: {
     age: '/programs/age',
     date: '/programs/date',
+    /** 전시 쪽과 대칭일 것으로 보이나 아직 관측하지 못했다. */
+    time: '/programs/time',
     payment: '/programs/payment',
     itemSelector: '.exhibition-list-container .exhibition-item.program',
   },

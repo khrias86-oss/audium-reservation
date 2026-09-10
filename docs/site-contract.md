@@ -144,8 +144,14 @@ NetFunnel_Action({action_id: "act_3"}, function () { programs.selDate(seq); });
 | 단계 | 전시(도슨트) | 렉처 | 주입 대상 |
 |---|---|---|---|
 | ① 연령·인원 | `/booking/age` | `/programs/age` | `.exhibition-wrapper` |
-| ② **날짜·회차** | **`/booking/date`** | `/programs/date` | `.exhibition-date-wrapper` |
-| ③ 제출 | `/booking/payment` | `/programs/payment` | `.payment-form` |
+| ② 날짜 목록 | `/booking/date` | `/programs/date` | `.exhibition-date-wrapper` |
+| ③ **회차·여석** | **`/booking/time`** | `/programs/time`(추정) | — |
+| ④ 제출 | `/booking/payment` | `/programs/payment` | `.payment-form` |
+
+**`/booking/time`은 9차 정찰에서 실제로 클릭해 흐름을 따라가다 발견했다.**
+8차의 스크립트 추출로는 잡히지 않았는데, 날짜를 고른 뒤에야 호출되기 때문이다.
+사이트 주석("시간을 선택하면 매진 여부를 체크")과 정확히 일치한다 —
+**여석의 최종 근거는 이 단계다.**
 
 응답은 **JSON이 아니라 HTML 조각**이며 해당 컨테이너에 `.html(e)`로 주입된다.
 
