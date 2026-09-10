@@ -10,21 +10,28 @@ GitHub 이슈 주소로 넘긴다. 이슈가 감시 목록이자 알림 채널�
 
 ## 어디에 올려져 있는가
 
-**https://claude.ai/code/artifact/1af3e850-4a59-4c2d-8501-39bb6548f72a**
-(비공개. 소유자만 열린다.)
+두 곳이다. 내용은 같다.
 
-GitHub Pages를 쓰지 않은 이유는 하나다. **Pages는 private 저장소에서 무료
-플랜으로 동작하지 않는다** (Pro 이상이 필요하다). 이 저장소를 public으로
-바꾸면 Pages를 쓸 수 있고, 덤으로 Actions 시간도 무제한이 된다 —
-다만 감시 신청 이슈(어떤 날짜에 가고 싶은지)도 함께 공개된다.
-바꿀지 말지는 사용자가 정할 일이라 그대로 두었다.
+| 주소 | 성격 |
+|---|---|
+| **https://khrias86-oss.github.io/audium-reservation/** | GitHub Pages. `main`의 `docs-site/`가 바뀌면 자동 배포된다 |
+| https://claude.ai/code/artifact/1af3e850-4a59-4c2d-8501-39bb6548f72a | 비공개 사본. 소유자만 열린다 |
 
-저장소를 public으로 바꾸기로 했다면:
+배포는 `.github/workflows/pages.yml`이 한다. **브랜치 배포를 쓰지 않은 이유**는
+그 방식이 루트나 `/docs` 두 곳만 고를 수 있기 때문이다. 이 저장소의 `docs/`는
+이미 설계 문서가 쓰고 있어서, 문서를 옮기거나 섞는 대신 Actions로 올린다.
+폴더 제약이 없고 Pages 활성화까지 자동으로 된다.
 
-```
-Settings → General → Danger Zone → Change visibility → Public
-Settings → Pages → Source: Deploy from a branch → main / docs-site
-```
+### 페이지가 공개되어도 안전한 이유
+
+저장소가 public이므로 이 페이지도 누구나 열 수 있다. 그래도 문제가 없는 것은
+**페이지가 비밀을 하나도 담고 있지 않기** 때문이다.
+
+- GitHub 토큰은 파일에 없다. 사용자가 자기 브라우저에 직접 넣고, `localStorage`에만
+  남으며, `api.github.com` 외에는 나가지 않는다
+- "내 예약 정보"(이름·이메일·휴대폰)도 마찬가지로 브라우저에만 있다
+- 남의 브라우저에서 이 페이지를 열어도 할 수 있는 일은 **자기 토큰으로 자기가
+  권한을 가진 저장소에 이슈를 만드는 것**뿐이다
 
 ## 고칠 때 주의할 것
 
