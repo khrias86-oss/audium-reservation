@@ -180,6 +180,7 @@
 
 <section id="status">
   <h2>지금 감시 중 <span id="livecount" style="font-weight:400"></span></h2>
+  <p class="note" id="lastrun" style="margin:0 0 12px"></p>
   <ul class="live" id="live"></ul>
   <p class="empty" id="livenone">자동 등록을 켜면 여기에서 바로 확인할 수 있습니다.</p>
 </section>
@@ -221,6 +222,7 @@
         <li><a id="tokenlink" target="_blank" rel="noopener">GitHub 토큰 만들기 화면 열기</a></li>
         <li><b>Repository access</b>에서 <b>Only select repositories</b> → 이 저장소를 고릅니다</li>
         <li><b>Repository permissions</b> → <b>Issues</b> 를 <b>Read and write</b> 로 바꿉니다</li>
+        <li>같은 목록의 <b>Actions</b> 를 <b>Read-only</b> 로 바꿉니다 (마지막 확인 시각을 보려고)</li>
         <li><b>Generate token</b> → 나온 값을 복사해 위 칸에 붙여넣습니다</li>
       </ol>
       <p class="note">
@@ -558,6 +560,7 @@ async function connect(candidate) {
   setAuthState('✅ 연결됨 — 이제 버튼 한 번으로 등록됩니다.', 'ok');
   $('token').value = '';
   await loadLive();
+  void loadLastRun();
   drawPicked();
   return true;
 }
@@ -575,6 +578,7 @@ $('cleartoken').onclick = () => {
   $('live').innerHTML = '';
   $('livenone').hidden = false;
   $('livecount').textContent = '';
+  $('lastrun').textContent = '';
   drawPicked();
 };
 
@@ -621,6 +625,56 @@ async function loadLive() {
   $('livenone').textContent = token
     ? '감시 중인 신청이 없습니다. 아래에서 골라 등록하세요.'
     : '자동 등록을 켜면 여기에서 바로 확인할 수 있습니다.';
+}
+
+/**
+ * 마지막으로 감시가 돈 시각.
+ *
+ * ## 왜 이 줄이 필요한가
+ *
+ * 감시가 통째로 멈춘 적이 있다. 워크플로가 기본 브랜치에 없어서 예약된 실행이
+ * 한 번도 일어나지 않았는데, **화면 어디에도 그 사실이 드러나지 않았다.**
+ * 신청서는 잘 등록돼 있었고 오류도 없었으니, 사용자가 알아챌 방법이 없었다.
+ *
+ * 조용히 멈추는 감시는 없는 감시보다 나쁘다. 없으면 직접 보기라도 한다.
+ * 그래서 "마지막으로 언제 돌았는지"를 항상 보이게 둔다.
+ */
+async function loadLastRun() {
+  if (!token) { $('lastrun').textContent = ''; return; }
+  let run;
+  try {
+    const res = await api('/actions/workflows/watch.yml/runs?per_page=1');
+    if (!res.ok) {
+      // Actions 읽기 권한이 없으면 여기로 온다. 기능이 하나 빠질 뿐이므로
+      // 경고가 아니라 안내로 말한다.
+      $('lastrun').textContent = res.status === 403
+        ? '마지막 확인 시각을 보려면 토큰에 Actions 읽기 권한이 필요합니다.'
+        : '';
+      return;
+    }
+    run = (await res.json()).workflow_runs?.[0];
+  } catch { return; }
+
+  if (!run) {
+    $('lastrun').innerHTML = '⚠️ <b>아직 한 번도 확인이 실행되지 않았습니다.</b>';
+    $('lastrun').className = 'bad';
+    return;
+  }
+
+  const minutes = Math.round((Date.now() - new Date(run.run_started_at || run.created_at)) / 60000);
+  const ago = minutes < 1 ? '방금' : minutes < 60 ? `${minutes}분 전`
+    : minutes < 1440 ? `${Math.round(minutes / 60)}시간 전` : `${Math.round(minutes / 1440)}일 전`;
+
+  // 감시는 수~토 09~22시(KST)에만 돈다. 그 시간대가 아니면 오래됐어도 정상이다.
+  const kst = new Date(Date.now() + 9 * 3600_000);
+  const watching = kst.getUTCDay() >= 3 && kst.getUTCDay() <= 6
+    && kst.getUTCHours() >= 9 && kst.getUTCHours() < 22;
+  const stale = watching && minutes > 30;
+
+  $('lastrun').innerHTML = stale
+    ? `⚠️ <b>마지막 확인이 ${ago}입니다.</b> 지금은 10분마다 돌아야 하는 시간대입니다 — 감시가 멈췄을 수 있습니다.`
+    : `마지막 확인: <b>${ago}</b>${watching ? '' : ' (지금은 감시 시간대가 아닙니다)'}`;
+  $('lastrun').className = stale ? 'bad' : 'note';
 }
 
 /** 이미 같은 날짜·회차를 감시 중인지. 중복 신청을 만들지 않는다. */
@@ -725,6 +779,7 @@ setAuthState(token
 load();
 drawKinds(); drawTimes(); drawDow(); refresh();
 void loadLive();
+void loadLastRun();
 </script>
 </body>
 </html>
