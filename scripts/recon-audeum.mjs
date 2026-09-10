@@ -32,6 +32,9 @@ const DANGEROUS_TEXT =
   /예약하기|예약신청|신청하기|제출|결제|확인|다음|완료|로그인|가입|취소하기|submit|confirm|pay|complete|login|sign\s*up|checkout/i;
 const DATE_LIKE = /^\s*(0?[1-9]|[12]\d|3[01])\s*$/;
 
+/** 사이트가 상품 재클릭을 3초간 무시한다 (8차 정찰에서 확인). */
+const ITEM_COOLDOWN_MS = 3_500;
+
 /** 대기열 페이지의 지문. 이 문구는 5차 정찰에서 실제로 관측한 것이다. */
 const QUEUE_MARKERS = [
   '동시접속자가 많아',
@@ -130,7 +133,12 @@ async function main() {
     if (!['xhr', 'fetch', 'document'].includes(r.request().resourceType())) return;
     let body = null;
     try {
-      if ((r.headers()['content-type'] ?? '').includes('json')) body = (await r.text()).slice(0, 6000);
+      // 이 사이트는 JSON이 아니라 HTML 조각을 주고받는다(8차 확인).
+      // audeum.org 응답은 형식과 무관하게 본문을 잡아야 계약을 볼 수 있다.
+      const ct = r.headers()['content-type'] ?? '';
+      if (r.url().includes('audeum.org') && (ct.includes('json') || ct.includes('html') || ct.includes('text'))) {
+        body = (await r.text()).slice(0, 8000);
+      }
     } catch { /* 본문을 못 읽어도 나머지는 유효하다 */ }
     const entry = { t: 'res', url: r.url(), status: r.status(), body };
     networkLog.push(entry);
@@ -260,70 +268,58 @@ async function main() {
     passed.push({ ...target, text: result.text, html });
   }
 
-  // ─── 단계 2: 통과한 페이지에서 캘린더 찾기 ────────────────────────────
-  log('\n## 단계 2 — 캘린더·회차 탐색\n');
-  const richest = passed.sort((a, b) => b.text.length - a.text.length)[0];
+  // ─── 단계 2: 실제 예약 흐름을 따라가 날짜 조각을 캡처한다 ──────────────
+  //
+  // 8차에서 플로우가 드러났다:
+  //   .exhibition-item 클릭 → POST /booking/age → NetFunnel(act_3) → /booking/date
+  //
+  // 그 마지막 조각(.exhibition-date-wrapper)이 여석 판단의 근거다. 여기까지만 간다.
+  // 결제 단계(/booking/payment, #btn_reserve)는 건드리지 않는다.
+  log('\n## 단계 2 — 예약 흐름을 따라 날짜 조각 캡처\n');
 
-  if (!richest) {
-    log('통과한 페이지가 없어 캘린더를 찾을 수 없습니다.');
-  } else {
-    try {
-      log(`대상: ${richest.url} (본문 ${richest.text.length}자)\n`);
-      await gotoThroughQueue(richest.url);
+  try {
+    await gotoThroughQueue(`${BASE}/booking`);
 
-      const times = [...richest.text.matchAll(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g)].map((m) => m[0]);
-      log(`본문에서 발견한 HH:MM 패턴: ${times.length ? [...new Set(times)].join(', ') : '없음'}`);
+    // 전시(도슨트)와 렉처를 모두 시도한다. 사용자가 원하는 것은 전시 쪽이다.
+    for (const kind of ['exhibition', 'program']) {
+      const selector = `.exhibition-list-container .exhibition-item.${kind}`;
+      const count = await page.locator(selector).count().catch(() => 0);
+      log(`\n### ${kind === 'exhibition' ? '전시(도슨트)' : '렉처'} — ${selector} (${count}개)`);
+      if (count === 0) { log('- 항목이 없어 건너뜁니다'); continue; }
 
-      const candidates = await page.$$eval('button, td, div, span, a, li', (els) =>
-        els.filter((el) => el.children.length === 0)
-          .map((el) => ({ text: (el.textContent ?? '').trim(), tag: el.tagName }))
-          .filter((c) => c.text.length > 0 && c.text.length < 5),
-      ).catch(() => []);
+      const seq = await page.locator(`${selector} seq`).first().textContent().catch(() => null);
+      log(`- seq: ${seq ?? '(읽지 못함)'}`);
 
-      const dateLike = candidates.filter((c) => DATE_LIKE.test(c.text) && !DANGEROUS_TEXT.test(c.text));
-      log(`날짜로 보이는 요소: ${dateLike.length}개${dateLike.length ? ` (${dateLike.slice(0, 15).map((c) => c.text).join(', ')})` : ''}`);
+      await page.locator(selector).first().click({ timeout: 5_000 });
 
-      let clicked = 0;
-      for (const cand of dateLike.slice(0, 15)) {
-        if (clicked >= 4) break;
-        const before = networkLog.length;
-        try {
-          const loc = page.locator(cand.tag.toLowerCase())
-            .filter({ hasText: new RegExp(`^\\s*${cand.text}\\s*$`) }).first();
-          if (await loc.isDisabled().catch(() => false)) {
-            log(`- "${cand.text}" 비활성 → 매진/휴관 신호 후보`);
-            continue;
-          }
-          await loc.click({ timeout: 3_000 });
-          await page.waitForTimeout(2_000);
-          clicked++;
-          const after = await page.evaluate(() => document.body?.innerText ?? '').catch(() => '');
-          log(`- "${cand.text}" 클릭 → 요청 ${networkLog.length - before}건, 본문 ${after.length}자`);
-          if (after.length > richest.text.length + 50) {
-            log('  새 내용이 나타났습니다:');
-            log('```');
-            log(after.slice(0, 1500).replace(/\n{3,}/g, '\n\n'));
-            log('```');
-          }
-          await page.screenshot({ path: `${OUT}/click-${clicked}.png`, fullPage: true }).catch(() => {});
-        } catch (e) {
-          log(`- "${cand.text}" 클릭 실패: ${e.message.split('\n')[0]}`);
+      // 사이트가 age → NetFunnel → date 순으로 채운다. 넉넉히 기다린다.
+      await page.waitForTimeout(9_000);
+
+      for (const [name, sel] of [['연령', '.exhibition-wrapper'], ['날짜', '.exhibition-date-wrapper']]) {
+        const html = await page.locator(sel).first().innerHTML().catch(() => '');
+        const text = await page.locator(sel).first().innerText().catch(() => '');
+        log(`\n**${name} 컨테이너 \`${sel}\`** — HTML ${html.length}자 / 텍스트 ${text.length}자`);
+        if (text.trim()) {
+          log('```');
+          log(text.slice(0, 1200).replace(/\n{3,}/g, '\n\n'));
+          log('```');
         }
+        if (html.trim()) {
+          log('```html');
+          log(html.slice(0, 4000).replace(/\s{2,}/g, ' '));
+          log('```');
+        }
+        writeFileSync(`${OUT}/${kind}-${name}.html`, html);
       }
 
-      const signals = await page.evaluate(() => {
-        const body = document.body?.innerText ?? '';
-        return ['마감', '매진', '잔여', '남음', '가능', '회차', '예약', 'SOLD', 'FULL']
-          .map((p) => ({ p, n: (body.match(new RegExp(p, 'gi')) || []).length }))
-          .filter((x) => x.n > 0);
-      }).catch(() => []);
-      log(`\n매진·여석 신호: ${signals.length ? signals.map((s) => `${s.p}(${s.n})`).join(', ') : '없음'}`);
+      await page.screenshot({ path: `${OUT}/flow-${kind}.png`, fullPage: true }).catch(() => {});
 
-      const disabled = await page.locator('[disabled], [aria-disabled="true"], .disabled, .sold-out').count().catch(() => 0);
-      log(`disabled 계열 셀렉터: ${disabled}개`);
-    } catch (e) {
-      log(`탐색 중 오류: ${e.message}`);
+      // 3초 쿨다운 + 다음 상품을 위해 페이지를 되돌린다
+      await page.waitForTimeout(ITEM_COOLDOWN_MS);
+      await gotoThroughQueue(`${BASE}/booking`);
     }
+  } catch (e) {
+    log(`흐름 추적 중 오류: ${e.message.split('\n')[0]}`);
   }
 
   await browser.close();
