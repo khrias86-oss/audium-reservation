@@ -50,9 +50,9 @@ const say = (line: string) => { console.log(line); summary.push(line); };
 
 async function main(): Promise<void> {
   say(`## 오디움 빈자리 확인 — ${new Date().toISOString()}`);
-  say(liveBooking
+  say(gate.live
     ? '⚠️ **실제 예약 모드** — 자리를 찾으면 예약을 진행합니다'
-    : `확인만 하는 모드 — ${gate.live ? '' : gate.reason}`);
+    : gate.reason);
 
   const issues = await gh('/issues?state=open&labels=watch-request&per_page=100');
   const { requests, problems } = parseWatchRequests(issues);
