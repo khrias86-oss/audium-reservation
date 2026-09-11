@@ -35,24 +35,47 @@ export function createGitHubIssueNotifier(config: GitHubIssueConfig): Notifier {
     'content-type': 'application/json',
   };
 
-  async function hasOpenIssueWithLabel(label: string): Promise<boolean> {
+  /**
+   * 이 슬롯에 대해 이미 열려 있는 알림 이슈.
+   *
+   * `updated_at`을 함께 돌려준다. 댓글이 달리면 갱신되므로, 마지막으로 이
+   * 슬롯을 알린 시각이 된다.
+   */
+  async function openAlertFor(label: string): Promise<{ number: number; updatedAt: number } | null> {
     const url = `${base}/repos/${config.owner}/${config.repo}/issues`
       + `?state=open&labels=${encodeURIComponent(label)}&per_page=1`;
     const res = await fetch(url, { headers });
     if (!res.ok) {
-      // 조회 실패를 "없음"으로 해석하면 알림이 폭주한다. 있다고 보고 넘어간다.
+      // 조회 실패를 "없음"으로 해석하면 알림이 폭주한다. 차라리 보내지 않는다.
       throw new Error(`이슈 조회 실패 (HTTP ${res.status}) — 중복 알림을 막기 위해 발송하지 않습니다`);
     }
-    const issues = (await res.json()) as unknown[];
-    return issues.length > 0;
+    const issues = (await res.json()) as Array<{ number: number; updated_at: string }>;
+    const first = issues[0];
+    return first ? { number: first.number, updatedAt: Date.parse(first.updated_at) } : null;
   }
 
   return {
     async send(notification) {
       const label = slotLabel(notification);
+      const existing = label === null ? null : await openAlertFor(label);
 
-      if (label !== null && (await hasOpenIssueWithLabel(label))) {
-        return; // 이미 알린 슬롯이다.
+      if (existing !== null) {
+        // 여기서 그냥 돌아가면 **같은 회차에 자리가 다시 나도 영원히 알리지 않는다.**
+        //
+        // 실제로 그 일이 일어났다. 9월 19일 13:30 자리가 새벽 4시 20분에 5분간
+        // 열렸고 시스템이 정확히 잡아 알렸지만, 사용자는 자고 있었다. 그 뒤로
+        // 같은 회차에 자리가 나도 이슈가 열려 있다는 이유로 침묵했을 것이다.
+        // 알림 본문이 "이 이슈를 닫지 마세요"라고 안내하는 것과 정면으로 충돌했다.
+        //
+        // 그래서 이제는 기존 이슈에 **댓글로** 다시 알린다. GitHub이 댓글에도
+        // 푸시와 메일을 보내므로 사용자는 다시 알게 되고, 이력은 이슈 하나에 쌓인다.
+        const since = Date.now() - existing.updatedAt;
+        if (since < RENOTIFY_COOLDOWN_MS) {
+          // 자리가 한동안 계속 열려 있으면 확인할 때마다 댓글이 달려 스팸이 된다.
+          return;
+        }
+        await comment(existing.number, notification);
+        return;
       }
 
       const res = await fetch(`${base}/repos/${config.owner}/${config.repo}/issues`, {
@@ -70,7 +93,32 @@ export function createGitHubIssueNotifier(config: GitHubIssueConfig): Notifier {
       }
     },
   };
+
+  async function comment(issueNumber: number, notification: Notification): Promise<void> {
+    const res = await fetch(
+      `${base}/repos/${config.owner}/${config.repo}/issues/${issueNumber}/comments`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          body: `## 🔔 자리가 또 났습니다\n\n${bodyFor(notification)}`,
+        }),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`재알림 댓글 실패 (HTTP ${res.status})`);
+    }
+  }
 }
+
+/**
+ * 같은 슬롯을 다시 알리기까지 기다리는 시간.
+ *
+ * 짧으면 자리가 계속 열려 있는 동안 5분마다 댓글이 달려 알림이 무의미해지고,
+ * 길면 사라졌다 다시 난 자리를 놓친다. 오디움 취소표는 5분에서 몇 시간까지
+ * 남아 있으므로 30분이면 양쪽을 다 지킨다 — 스팸은 아니고, 다시 난 자리는 잡는다.
+ */
+export const RENOTIFY_COOLDOWN_MS = 30 * 60_000;
 
 /**
  * 모바일 알림에서 제목 다음으로 보이는 첫 줄이 가장 중요하다.
