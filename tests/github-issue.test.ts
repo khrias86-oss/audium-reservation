@@ -37,16 +37,56 @@ describe('슬롯 라벨', () => {
   });
 });
 
+/** 열린 알림 이슈를 흉내낸다. `ago`는 마지막 활동이 몇 분 전인지. */
+const openIssue = (ago: number) => [{
+  number: 1,
+  updated_at: new Date(Date.now() - ago * 60_000).toISOString(),
+}];
+
 describe('중복 알림 억제', () => {
-  it('같은 슬롯에 열린 이슈가 있으면 새로 만들지 않는다', async () => {
+  it('방금 알린 슬롯은 다시 알리지 않는다', async () => {
     const calls: string[] = [];
     const n = notifier((async (url: string | URL | Request, init?: RequestInit) => {
       calls.push(`${init?.method ?? 'GET'} ${String(url)}`);
-      return ok([{ number: 1 }]); // 이미 열린 이슈가 있다
+      return ok(openIssue(3)); // 3분 전에 알렸다
     }) as typeof fetch);
 
     await n.send(booked);
     expect(calls.filter((c) => c.startsWith('POST'))).toHaveLength(0);
+  });
+
+  it('쿨다운이 지나면 기존 이슈에 댓글로 다시 알린다', async () => {
+    // 이것이 없으면 같은 회차에 자리가 다시 나도 영원히 침묵한다.
+    // 실제로 그 일이 일어났다 — 새벽에 5분간 열린 자리를 알린 뒤,
+    // 이슈가 열려 있다는 이유로 그 뒤의 모든 기회를 놓칠 뻔했다.
+    const posts: Array<{ url: string; body: string }> = [];
+    const n = notifier((async (url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        posts.push({ url: String(url), body: String(init.body) });
+        return ok({ id: 1 });
+      }
+      return ok(openIssue(45)); // 45분 전에 알렸다 — 쿨다운(30분)이 지났다
+    }) as typeof fetch);
+
+    await n.send(booked);
+    expect(posts).toHaveLength(1);
+    // 새 이슈가 아니라 기존 이슈의 댓글이어야 한다.
+    expect(posts[0]?.url).toContain('/issues/1/comments');
+    expect(JSON.parse(posts[0]!.body).body).toContain('자리가 또 났습니다');
+  });
+
+  it('재알림 댓글에도 예약 순서표가 그대로 들어간다', async () => {
+    // 댓글만 보고도 바로 움직일 수 있어야 한다. "또 났습니다"만으로는 부족하다.
+    const posts: string[] = [];
+    const n = notifier((async (_url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST') { posts.push(String(init.body)); return ok({ id: 1 }); }
+      return ok(openIssue(45));
+    }) as typeof fetch);
+
+    await n.send(needsAction);
+    const body = JSON.parse(posts[0]!).body;
+    expect(body).toContain('인증번호 발송');
+    expect(body).toContain('10:00');
   });
 
   it('열린 이슈가 없으면 생성한다', async () => {
@@ -60,6 +100,19 @@ describe('중복 알림 억제', () => {
     expect(posts).toHaveLength(1);
     const body = JSON.parse(String(posts[0]?.body));
     expect(body.labels).toContain('slot:2026-03-14T10:00');
+  });
+
+  it('시스템 경고는 슬롯 중복 검사를 거치지 않는다', async () => {
+    // 경고에는 슬롯 라벨이 없다. 조회를 시도하면 엉뚱한 라벨로 묻게 된다.
+    const calls: string[] = [];
+    const n = notifier((async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${String(url)}`);
+      if (init?.method === 'POST') return ok({ number: 9 });
+      throw new Error('경고 알림은 이슈를 조회하면 안 된다');
+    }) as typeof fetch);
+
+    await n.send(warning);
+    expect(calls.filter((c) => c.startsWith('POST'))).toHaveLength(1);
   });
 
   it('이슈 조회가 실패하면 발송하지 않고 오류를 낸다', async () => {
