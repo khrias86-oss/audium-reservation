@@ -10,12 +10,23 @@ GitHub 이슈 주소로 넘긴다. 이슈가 감시 목록이자 알림 채널�
 
 ## 어디에 올려져 있는가
 
-두 곳이다. 내용은 같다.
+두 곳이다. 내용은 같지만 **한 가지가 다르다.**
 
-| 주소 | 성격 |
-|---|---|
-| **https://claude.ai/code/artifact/1af3e850-4a59-4c2d-8501-39bb6548f72a** | 지금 쓰는 곳. 소유자만 열린다 |
-| https://khrias86-oss.github.io/audium-reservation/ | Pages를 켜면 여기서도 열린다 (아래 참고) |
+| 주소 | 성격 | 자동 등록 |
+|---|---|---|
+| **https://claude.ai/code/artifact/1af3e850-4a59-4c2d-8501-39bb6548f72a** | 지금 쓰는 곳. 소유자만 열린다 | ❌ 미리보기 CSP가 `fetch`를 막는다 |
+| https://khrias86-oss.github.io/audium-reservation/ | Pages를 켜면 여기서도 열린다 (아래 참고) | ✅ 정상 작동 |
+
+### 왜 미리보기에서는 자동 등록이 안 되는가
+
+Claude 아티팩트(미리보기) 페이지는 보안 정책(CSP)으로 `api.github.com`을 포함해
+임의의 외부 서버로 나가는 `fetch`를 전부 막는다. 토큰을 넣고 "연결하기"를 누르면
+`TypeError: Failed to fetch`가 나는데, 이건 인터넷 문제가 아니라 이 차단이다.
+`connect()`가 이 경우를 감지해 정확한 안내를 준다 (`looksLikePreview()`).
+
+**신청서를 하나씩 눌러 등록하는 방식**(`window.location.href`로 GitHub 이슈 작성
+화면을 여는 것)은 `fetch`가 아니라 페이지 이동이라 CSP의 영향을 받지 않는다.
+그래서 미리보기에서도 그대로 동작한다 — 감시 자체는 막히지 않는다.
 
 배포는 `.github/workflows/pages.yml`이 한다. 다만 **Pages는 한 번 사람이 켜야
 한다** — `Settings → Pages → Source: GitHub Actions`. Actions의 기본 토큰에는
