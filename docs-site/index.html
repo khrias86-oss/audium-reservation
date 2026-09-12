@@ -526,6 +526,19 @@ const api = (path, init = {}) =>
     },
   });
 
+/**
+ * 이 페이지가 Claude 미리보기(아티팩트) 안에서 열렸는지 짐작한다.
+ *
+ * Claude 아티팩트는 보안 정책(CSP)으로 임의의 외부 서버로 가는 fetch를 전부
+ * 막는다 — api.github.com도 예외가 아니다. 그 상태에서 fetch가 실패하면
+ * 평범한 네트워크 오류(offline)와 똑같은 예외로 보이므로, 구분 없이
+ * "인터넷을 확인하라"고 안내하면 사실과 다른 말을 하게 된다.
+ * GitHub Pages 주소(...github.io)가 아니면 미리보기로 보고 원인을 정확히 말한다.
+ */
+function looksLikePreview() {
+  return !/\.github\.io$/.test(location.hostname);
+}
+
 function setAuthState(text, cls) {
   const el = $('authstate');
   el.textContent = text;
@@ -541,7 +554,16 @@ async function connect(candidate) {
     res = await api('');
   } catch {
     token = previous;
-    setAuthState('인터넷 연결을 확인해 주세요.', 'bad');
+    // 이 예외는 거의 항상 "인터넷이 끊김"이 아니라 "미리보기 화면이라 막힘"이다.
+    // 실제 인터넷 문제라고 안내하면 사용자가 애먼 곳(와이파이·데이터)을 고치려 든다.
+    setAuthState(
+      looksLikePreview()
+        ? '이 미리보기 화면에서는 보안 정책 때문에 자동 등록이 작동하지 않습니다. '
+          + '지금은 아래 "감시 신청하기"로 하나씩 등록해 주세요. '
+          + 'GitHub Pages를 켜신 뒤 그 주소(...github.io)에서 열면 자동 등록도 됩니다.'
+        : '인터넷 연결을 확인해 주세요.',
+      'bad',
+    );
     return false;
   }
   if (!res.ok) {
