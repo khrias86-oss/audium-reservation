@@ -1,7 +1,7 @@
 # audeum-reservation
 
-오디움(https://audeum.org/booking) 관람 예약을 10분 주기로 감시하고, 빈자리 발생 시
-이메일로 알린 뒤 자동으로 예약하는 개인용 시스템.
+오디움(https://audeum.org/booking) 관람 예약(전시·렉처, 두 상품 독립)을 5분 주기로
+감시하고, 빈자리 발생 시 이메일로 알린 뒤 자동으로 예약하는 개인용 시스템.
 
 전체 요구사항과 마일스톤은 `PROMPT.md`를 따른다.
 
@@ -10,12 +10,21 @@
 하나의 이미지가 두 모드로 돈다. 배포처에 결합되어 있지 않다.
 
 ```
-GitHub Actions cron ──▶ src/watch-once.ts    ← 실제로 도는 경로
+GitHub Actions cron ──▶ src/watch-once.ts    ← 실제로 도는 경로 (전시/렉처 완전 분리)
                               │
-                              ├─ GitHub 이슈(감시 요청) 읽기
+                              ├─ GitHub 이슈(감시 요청) 읽기 — product별로 나눠 처리
                               ├─ src/adapters/audeum/http-flow.ts  ← 폼 POST 1건
                               │     └─ parse-time-fragment.ts      ← 여석 판단
                               └─ 이슈로 알림
+
+                        같은 실행마다 (감시 요청 유무와 무관하게) ↓
+                   src/snapshot.ts → src/adapters/audeum/build-snapshot.ts
+                              │        (요일을 추측하지 않는다 — /booking/date가
+                              │         실측으로 밝힌 "열린 날짜"만 쓴다)
+                              └─▶ docs-site/data/availability.json 커밋
+                                        │
+                                        └─▶ pages.yml이 재배포 (CHAIN_TOKEN으로 깨움 —
+                                            기본 토큰의 push는 다른 워크플로를 못 깨운다)
 
 MODE=tick (src/runtime/tick.ts) ← 서킷·하트비트·상태기계가 있는 완전판 파이프라인.
                                    저장소가 붙는 M3+ 에서 쓴다.
@@ -34,7 +43,15 @@ Cloud Run은 브라우저가 필요할 때의 대안이었는데 브라우저를
 5분은 사이트 부담을 고려해 정한 하한이라 예산과 무관하게 유지한다.
 근거는 `.github/workflows/watch.yml` 머리말에 적어 두었다.
 
-감시 신청 페이지는 Pages로 배포된다 (`.github/workflows/pages.yml`).
+감시 신청 페이지는 **GitHub Pages가 1차 배포처다**
+(`https://khrias86-oss.github.io/audium-reservation/`, `.github/workflows/pages.yml`).
+Claude 아티팩트 미리보기는 개발 중 확인용 사본일 뿐 제품 URL이 아니다 — CSP가
+`fetch`를 막아 자동 등록이 안 되고, 소유자 세션에서만 열린다.
+**단, Pages는 저장소 설정에서 아직 켜지지 않았다** — `Settings → Pages →
+Source: GitHub Actions`를 사람이 한 번 눌러야 한다. Actions 기본 토큰에는
+Pages *사이트를 새로 만들* 권한이 없고 이미 켜진 곳에 배포할 권한뿐이라
+(`Resource not accessible by integration`), 자동화로 우회하지 않는다.
+켜기 전까지는 미리보기 사본이 유일한 확인 경로다.
 페이지에는 비밀이 없다 — 토큰과 예약 정보는 사용자 브라우저의 localStorage에만 있다.
 
 **핵심 규칙: `src/core/`는 오디움을 몰라야 한다.** core는 정규화된 `Slot` 타입만 다루고,
@@ -70,10 +87,14 @@ pnpm test
 - [x] M2 코어 로직
 - [x] M3 폴링 루프 — 실제로 돌고 있고, 실제 취소표를 한 번 잡아냈다
 - [x] M4 알림 — GitHub 이슈로 보낸다 (앱 푸시 + 이메일이 딸려 온다)
-- [x] M5 UI — `docs-site/index.html` 모바일 달력. 서버 없이 이슈 주소로 넘긴다
+- [x] M5 UI — `docs-site/index.html` 모바일 달력. 전시·렉처를 완전히 독립된
+      카드로 그리고, `docs-site/data/availability.json`(실측 당월 매진/여석)을
+      읽어 실제 상태를 보여준다. 서버 없이 이슈 주소로 넘긴다
 - [~] M6 자동예약 — **휴대폰 인증 + Cloudflare Turnstile이 막고 있다.**
       뚫지 않는다. 관문 앞까지 자동화하는 것이 최대치다. `docs/auto-booking.md` 참고
-- [x] M7 배포 — GitHub Actions (감시) + GitHub Pages (신청 페이지)
+- [~] M7 배포 — GitHub Actions (감시)는 돈다. GitHub Pages (신청 페이지)는
+      워크플로가 준비돼 있지만 **저장소 설정에서 아직 켜지지 않았다** — 사람이
+      `Settings → Pages → Source: GitHub Actions`를 한 번 눌러야 한다
 
 정찰은 두 워크플로로 돈다.
 - `recon.yml` — `recon-run` 브랜치 푸시. 브라우저 정찰(구식, 느림)
