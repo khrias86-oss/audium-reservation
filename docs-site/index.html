@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#141414">
 <title>오디움 빈자리 감시</title>
-<meta name="description" content="오디움 관람 빈자리를 자동으로 감시합니다. 날짜와 회차를 눌러서 고르세요.">
+<meta name="description" content="오디움 전시·렉처 빈자리를 프로그램별로 감시합니다. 달력에서 날짜를 눌러서 고르세요.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="오디움 감시">
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔔</text></svg>">
@@ -15,14 +15,28 @@
     --bg: #fbfbfa; --fg: #1a1a1a; --muted: #6b6b6b; --line: #e3e3e0;
     --card: #ffffff; --accent: #1a1a1a; --accent-fg: #ffffff;
     --pick: #2b7a4b; --pick-soft: #e8f3ec; --warn: #8a5a00; --warn-soft: #fdf3df;
+    --avail: #2f6fb0; --avail-soft: #e8f0f9; --bad: #c0392b;
+    --tag-exhibition: #b5651d; --tag-exhibition-soft: #f6e9dd;
+    --tag-lecture: #46618c; --tag-lecture-soft: #e6ebf3;
     --tap: 46px;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
       --bg: #141414; --fg: #f0efec; --muted: #9a9a96; --line: #2c2c2a;
       --card: #1d1d1b; --accent: #f0efec; --accent-fg: #141414;
       --pick: #6ec48f; --pick-soft: #1e3227; --warn: #e0b968; --warn-soft: #2a2416;
+      --avail: #7fb2e6; --avail-soft: #182634; --bad: #ff8a7a;
+      --tag-exhibition: #e0916a; --tag-exhibition-soft: #2e2119;
+      --tag-lecture: #8fa8d1; --tag-lecture-soft: #1c222e;
     }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141414; --fg: #f0efec; --muted: #9a9a96; --line: #2c2c2a;
+    --card: #1d1d1b; --accent: #f0efec; --accent-fg: #141414;
+    --pick: #6ec48f; --pick-soft: #1e3227; --warn: #e0b968; --warn-soft: #2a2416;
+    --avail: #7fb2e6; --avail-soft: #182634; --bad: #ff8a7a;
+    --tag-exhibition: #e0916a; --tag-exhibition-soft: #2e2119;
+    --tag-lecture: #8fa8d1; --tag-lecture-soft: #1c222e;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
@@ -41,36 +55,60 @@
             border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
   .notice b { color: inherit; }
 
-  .month { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-  .month button {
-    width: var(--tap); height: var(--tap); border: 1px solid var(--line); background: transparent;
-    color: var(--fg); border-radius: 10px; font-size: 18px; cursor: pointer;
-  }
-  .month button:disabled { opacity: .3; }
-  .month strong { font-size: 16px; }
+  /* ── 프로그램(전시/렉처) 카드 ── */
+  .product-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+  .tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
+         padding: 3px 9px; border-radius: 999px; }
+  .tag .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .tag.exhibition { color: var(--tag-exhibition); background: var(--tag-exhibition-soft); }
+  .tag.exhibition .dot { background: var(--tag-exhibition); }
+  .tag.lecture { color: var(--tag-lecture); background: var(--tag-lecture-soft); }
+  .tag.lecture .dot { background: var(--tag-lecture); }
+  .product-title { font-size: 16px; font-weight: 700; }
+  .opennote { font-size: 13px; color: var(--muted); margin: 6px 0 10px; }
+  .opennote b { color: var(--fg); }
+  .freshness { font-size: 11px; color: var(--muted); margin: -2px 0 12px; }
+
+  .month { text-align: center; margin-bottom: 8px; }
+  .month strong { font-size: 15px; }
 
   .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-  /* 드래그 중에 브라우저가 스크롤·텍스트선택을 가로채지 않게 한다 */
-  #days { touch-action: none; user-select: none; -webkit-user-select: none; }
   .dow { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0; }
   .day {
     aspect-ratio: 1; min-height: var(--tap); border: 1px solid transparent; background: transparent;
     color: var(--fg); border-radius: 10px; font-size: 15px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums;
-    padding: 0; transition: background .08s, color .08s;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-variant-numeric: tabular-nums; padding: 0; gap: 2px; position: relative;
   }
-  .day.off { color: var(--muted); opacity: .3; cursor: default; }
-  .day.open { border-color: var(--line); }
-  .day.on { background: var(--pick); color: #fff; border-color: var(--pick); font-weight: 600; }
-  .legend { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .day.past, .day.notopen { color: var(--muted); opacity: .38; cursor: default; }
+  .day.soldout { border-color: var(--line); }
+  .day.available { border-color: var(--avail); background: var(--avail-soft); color: var(--avail); font-weight: 600; }
+  .day.expanded { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .day .n { line-height: 1; }
+  .day .pickdot { width: 5px; height: 5px; border-radius: 50%; background: var(--pick); position: absolute; bottom: 5px; }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px 16px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+  .legend i.soldout { border: 1px solid var(--line); }
+  .legend i.available { background: var(--avail-soft); border: 1px solid var(--avail); }
+  .legend i.pick { background: var(--pick); }
+
+  .daypanel { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .daypanel-head { font-size: 14px; margin-bottom: 10px; }
+  .daypanel-head b { font-weight: 700; }
+  .placeholder { color: var(--muted); font-size: 14px; margin: 8px 0; text-align: center; padding: 12px 0; }
 
   .chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
   .chip {
     min-height: var(--tap); border: 1px solid var(--line); background: transparent; color: var(--fg);
-    border-radius: 10px; font-size: 15px; cursor: pointer; font-variant-numeric: tabular-nums; padding: 0 6px;
+    border-radius: 10px; font-size: 15px; cursor: pointer; font-variant-numeric: tabular-nums; padding: 2px 6px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.3;
   }
+  .chip small { color: var(--muted); font-size: 11px; }
   .chip.on { background: var(--pick); color: #fff; border-color: var(--pick); font-weight: 600; }
-  .two { grid-template-columns: 1fr 1fr; }
+  .chip.on small { color: rgba(255,255,255,.85); }
+  .quick { margin-top: 14px; }
+  .quick .label { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
   .note { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
 
   ul.picked { list-style: none; padding: 0; margin: 0; }
@@ -79,7 +117,7 @@
   .rank { width: 26px; height: 26px; border-radius: 50%; background: var(--pick-soft); color: var(--pick);
           display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
   .what { flex: 1; font-size: 15px; }
-  .what small { display: block; color: var(--muted); font-size: 12px; }
+  .what small { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; margin-top: 2px; }
   .icon { width: 36px; height: 36px; border: 0; background: transparent; color: var(--muted); font-size: 18px; cursor: pointer; flex: none; }
   .icon:disabled { opacity: .25; cursor: default; }
   .empty { color: var(--muted); font-size: 14px; margin: 0; }
@@ -109,8 +147,7 @@
   .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
   .btn.grow { flex: 1; }
   .ok { color: var(--pick); font-size: 13px; }
-  .bad { color: #c0392b; font-size: 13px; }
-  @media (prefers-color-scheme: dark) { .bad { color: #ff8a7a; } }
+  .bad { color: var(--bad); font-size: 13px; }
   details summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 6px 0; }
   details ol { padding-left: 20px; font-size: 13px; color: var(--muted); line-height: 1.7; }
   details a { color: var(--pick); }
@@ -120,6 +157,8 @@
   ul.live li:last-child { border-bottom: 0; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pick); flex: none; }
   .dot.warn { background: var(--warn); }
+  .dot.exhibition { background: var(--tag-exhibition); }
+  .dot.lecture { background: var(--tag-lecture); }
 
   .bar {
     position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
@@ -140,42 +179,19 @@
 <body>
 
 <h1>오디움 빈자리 감시</h1>
-<p class="sub">회차를 고르고, 달력에서 날짜를 <b>누르거나 문질러서</b> 고르세요.</p>
+<p class="sub">전시·렉처는 따로 감시할 수 있습니다. 달력에서 날짜를 눌러 회차를 고르세요.</p>
 
-<div class="notice" id="notice">
-  <b>예약 오픈</b> 격주 화요일 오후 2시(KST) · 관람은 <b>목·금·토</b>만 운영합니다.
-  빈자리 감시는 이미 열린 날짜의 <b>취소표</b>를 잡는 기능입니다.
-</div>
+<div class="notice" id="notice" hidden></div>
 
-<section>
-  <h2><b>1.</b> 관람 종류</h2>
-  <div class="chips two" id="kinds"></div>
-</section>
-
-<section>
-  <h2><b>2.</b> 희망 회차 <span id="tcount"></span></h2>
-  <div class="chips" id="times"></div>
-  <p class="note">여러 개를 골라도 됩니다. 고른 회차가 날짜마다 각각 감시 대상이 됩니다.</p>
-</section>
-
-<section>
-  <h2><b>3.</b> 관람 희망 날짜</h2>
-  <div class="month">
-    <button id="prev" aria-label="이전 달">‹</button>
-    <strong id="label"></strong>
-    <button id="next" aria-label="다음 달">›</button>
-  </div>
-  <div class="grid" id="dow"></div>
-  <div class="grid" id="days"></div>
-  <p class="legend">손가락으로 <b>문지르면</b> 여러 날짜가 한 번에 선택됩니다. 목·금·토만 고를 수 있습니다.</p>
-</section>
+<section id="product-exhibition" class="product" data-product="exhibition"></section>
+<section id="product-lecture" class="product" data-product="lecture"></section>
 
 <section>
   <h2>감시할 목록 <span id="count" style="font-weight:400"></span></h2>
   <ul class="picked" id="picked"></ul>
-  <p class="empty" id="none">아직 없습니다. 위에서 회차와 날짜를 고르면 여기에 쌓입니다.</p>
-  <p class="note">오디움은 <b>1인 1매</b>입니다. 위쪽부터 먼저 시도하고, 하나가 잡히면 나머지는 멈춥니다.
-     ↑ 를 눌러 순서를 올릴 수 있습니다.</p>
+  <p class="empty" id="none">아직 없습니다. 위 달력에서 날짜와 회차를 고르면 여기에 쌓입니다.</p>
+  <p class="note">오디움은 <b>1인 1매</b>입니다. 전시·렉처를 섞어 골라도 이 목록 하나로 순서가 매겨지며,
+     위쪽부터 먼저 시도하고 하나가 잡히면 나머지는 멈춥니다. ↑ 를 눌러 순서를 올릴 수 있습니다.</p>
 </section>
 
 <section id="status">
@@ -249,167 +265,235 @@
 
 <div class="bar"><div class="inner">
   <button class="go" id="go" disabled>감시 신청하기</button>
-  <p class="hint" id="hint">회차와 날짜를 고르세요</p>
+  <p class="hint" id="hint">달력에서 날짜와 회차를 고르세요</p>
 </div></div>
 
 <script>
 const REPO = 'khrias86-oss/audium-reservation';
+const DATA_URL = './data/availability.json';
 
-/** 실측한 회차 (2026-09-10 정찰). 사이트가 바꾸면 여기만 고치면 된다. */
-const ROUNDS = ['10:00', '11:00', '13:30', '14:30', '15:30'];
-const KINDS = [['exhibition', '전시 도슨트'], ['lecture', '렉처 프로그램']];
-/** 오디움은 목·금·토만 운영한다 (사이트 공지로 확인). 일=0 … 토=6 */
-const OPEN_DOW = [4, 5, 6];
+const PRODUCTS = ['exhibition', 'lecture'];
+const PRODUCT_LABEL = { exhibition: '전시', lecture: '렉처' };
+/** 이슈 본문 "관람 종류" 칸에 쓰는 문구. 감시 쪽(watch-requests.ts)이
+ *  이 문자열에 "렉처"가 들어있는지만 보고 상품을 가른다 — 반드시 맞춰야 한다. */
+const KIND_TEXT = { exhibition: '전시 도슨트', lecture: '렉처 프로그램' };
 
 const $ = (id) => document.getElementById(id);
-const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const DOW = ['일','월','화','수','목','금','토'];
-const today = iso(new Date());
+const today = (() => {
+  // KST 기준 오늘. 서버(build-snapshot.ts)와 같은 기준이어야 "지난 날짜"
+  // 판정이 어긋나지 않는다.
+  const k = new Date(Date.now() + 9 * 3600_000);
+  return `${k.getUTCFullYear()}-${String(k.getUTCMonth() + 1).padStart(2, '0')}-${String(k.getUTCDate()).padStart(2, '0')}`;
+})();
+/** `${date}T00:00:00+09:00`을 `.getDay()`로 읽으면 실행 환경(UTC 등)의
+ *  로컬 타임존으로 계산되어 하루 밀릴 수 있다 — 반드시 UTC로 파싱해 UTC로 읽는다. */
+const dowOf = (dateStr) => new Date(`${dateStr}T00:00:00Z`).getUTCDay();
 
-let cursor = new Date();
-let kind = 'exhibition';
-let times = new Set();
-let dates = new Set();
-let order = [];        // 사용자가 올린 순서를 기억한다. 비어 있으면 날짜·회차순.
-/** ×로 빼낸 조합. 날짜와 회차의 곱집합에 구멍을 낼 수 있게 한다. */
-let excluded = new Set();
-let opened = new Set();
+let availability = null;   // FullSnapshot | null (아직 못 받았거나 실패)
+let selected = { exhibition: new Set(), lecture: new Set() };  // "date|time"
+let order = [];             // "product|date|time" 순서
+let openDay = { exhibition: null, lecture: null };              // 펼쳐진 날짜
 
 const save = () => {
   try {
-    localStorage.setItem('audeum.v2', JSON.stringify({
-      kind, times: [...times], dates: [...dates], order, excluded: [...excluded],
+    localStorage.setItem('audeum.v3', JSON.stringify({
+      selected: { exhibition: [...selected.exhibition], lecture: [...selected.lecture] },
+      order,
     }));
   } catch { /* 사파리 프라이빗 모드 등에서는 저장이 막힌다. 기능은 그대로 동작한다. */ }
 };
 const load = () => {
   try {
-    const s = JSON.parse(localStorage.getItem('audeum.v2') || '{}');
-    if (s.kind) kind = s.kind;
-    if (Array.isArray(s.times)) times = new Set(s.times);
-    // 지난 날짜는 되살리지 않는다. 남아 있으면 잡을 수 없는 것을 감시하게 된다.
-    if (Array.isArray(s.dates)) dates = new Set(s.dates.filter((d) => d >= today));
+    const s = JSON.parse(localStorage.getItem('audeum.v3') || '{}');
+    for (const product of PRODUCTS) {
+      const list = s.selected?.[product];
+      // 지난 날짜는 되살리지 않는다. 남아 있으면 잡을 수 없는 것을 감시하게 된다.
+      if (Array.isArray(list)) selected[product] = new Set(list.filter((k) => k.split('|')[0] >= today));
+    }
     if (Array.isArray(s.order)) order = s.order;
-    if (Array.isArray(s.excluded)) excluded = new Set(s.excluded);
   } catch { /* 저장된 값이 깨졌으면 빈 상태로 시작한다 */ }
 };
 
-/** 고른 회차 × 고른 날짜. 순서는 사용자가 올린 것을 먼저, 나머지는 날짜·회차순. */
+function snapshotOf(product) {
+  return availability?.products?.find((p) => p.product === product) ?? null;
+}
+function dayOf(product, date) {
+  return snapshotOf(product)?.days?.find((d) => d.date === date) ?? null;
+}
+
+/** 고른 것 전체. 순서는 사용자가 올린 것을 먼저, 나머지는 날짜·회차순. */
 function picks() {
   const all = [];
-  for (const d of [...dates].sort()) {
-    for (const t of ROUNDS.filter((r) => times.has(r))) all.push({ key: `${d}|${t}`, date: d, time: t });
+  for (const product of PRODUCTS) {
+    for (const key of selected[product]) {
+      const [date, time] = key.split('|');
+      all.push({ product, date, time, key: `${product}|${date}|${time}` });
+    }
   }
   const rank = (p) => { const i = order.indexOf(p.key); return i === -1 ? 1e9 : i; };
-  return all
-    .filter((p) => !excluded.has(p.key))
-    .sort((a, b) => rank(a) - rank(b) || (a.key < b.key ? -1 : 1));
+  return all.sort((a, b) => rank(a) - rank(b) || (a.key < b.key ? -1 : 1));
 }
 
-function drawKinds() {
-  $('kinds').innerHTML = KINDS
-    .map(([v, l]) => `<button class="chip ${kind === v ? 'on' : ''}" data-k="${v}">${l}</button>`).join('');
-  for (const b of $('kinds').querySelectorAll('[data-k]')) {
-    b.onclick = () => { kind = b.dataset.k; drawKinds(); refresh(); };
+function toggleSelected(product, date, time) {
+  const key = `${date}|${time}`;
+  if (selected[product].has(key)) {
+    selected[product].delete(key);
+    order = order.filter((k) => k !== `${product}|${key}`);
+  } else {
+    selected[product].add(key);
   }
+  refresh();
 }
 
-function drawTimes() {
-  $('times').innerHTML = ROUNDS
-    .map((t) => `<button class="chip ${times.has(t) ? 'on' : ''}" data-t="${t}">${t}</button>`).join('');
-  for (const b of $('times').querySelectorAll('[data-t]')) {
+/** 그 달에 실제로 등장하는 회차 시각들(빠른 선택용). 매진이든 여석이든 상관없다. */
+function timesInMonth(product) {
+  const snap = snapshotOf(product);
+  if (!snap) return [];
+  const set = new Set();
+  for (const d of snap.days) for (const s of d.slots ?? []) set.add(s.time);
+  return [...set].sort();
+}
+
+/** 이 시각을 가진, 지금 고를 수 있는(SOLD_OUT/AVAILABLE) 모든 날짜 키. */
+function keysForTime(product, time) {
+  const snap = snapshotOf(product);
+  if (!snap) return [];
+  return snap.days.filter((d) => d.slots?.some((s) => s.time === time)).map((d) => `${d.date}|${time}`);
+}
+
+function toggleQuickTime(product, time) {
+  const keys = keysForTime(product, time);
+  const allOn = keys.length > 0 && keys.every((k) => selected[product].has(k));
+  for (const k of keys) {
+    if (allOn) {
+      selected[product].delete(k);
+      order = order.filter((o) => o !== `${product}|${k}`);
+    } else {
+      selected[product].add(k);
+    }
+  }
+  refresh();
+}
+
+function nextOpenText(product) {
+  const snap = snapshotOf(product);
+  if (!snap) return null;
+  const upcoming = snap.days.filter((d) => d.state === 'NOT_OPEN' && d.opensAt);
+  if (!upcoming.length) return null;
+  upcoming.sort((a, b) => (a.opensAt < b.opensAt ? -1 : 1));
+  const [datePart, timePart] = upcoming[0].opensAt.split('T');
+  const [, m, d] = datePart.split('-');
+  const hm = (timePart || '').slice(0, 5);
+  return `다음 예약 오픈: <b>${Number(m)}월 ${Number(d)}일(${DOW[dowOf(datePart)]}) ${hm}</b>`;
+}
+
+function freshnessText() {
+  if (!availability?.generatedAt) return '';
+  const minutes = Math.round((Date.now() - new Date(availability.generatedAt)) / 60000);
+  const ago = minutes < 1 ? '방금' : minutes < 60 ? `${minutes}분 전`
+    : minutes < 1440 ? `${Math.round(minutes / 60)}시간 전` : `${Math.round(minutes / 1440)}일 전`;
+  return `달력 정보 갱신: ${ago}`;
+}
+
+function renderProduct(product) {
+  const host = $(`product-${product}`);
+  const snap = snapshotOf(product);
+
+  if (!snap) {
+    host.innerHTML = `
+      <div class="product-head">
+        <span class="tag ${product}"><span class="dot"></span>${PRODUCT_LABEL[product]}</span>
+      </div>
+      <p class="placeholder">${availability === null
+        ? '달력 정보를 불러오는 중입니다…'
+        : '아직 이 프로그램의 달력 정보가 없습니다. 감시 시스템이 곧 채웁니다.'}</p>`;
+    return;
+  }
+
+  const [y, m] = snap.month.split('-').map(Number);
+  const opennote = nextOpenText(product);
+
+  const leadBlanks = snap.days.length ? snap.days[0].dow : 0;
+  let gridHtml = '';
+  for (let i = 0; i < leadBlanks; i++) gridHtml += '<div></div>';
+  for (const day of snap.days) {
+    const n = Number(day.date.slice(-2));
+    const stateCls = day.state.toLowerCase().replace('_', '');
+    const tappable = day.state === 'SOLD_OUT' || day.state === 'AVAILABLE';
+    const hasPick = tappable && (day.slots ?? []).some((s) => selected[product].has(`${day.date}|${s.time}`));
+    const expanded = openDay[product] === day.date;
+    const title = day.state === 'NOT_OPEN' && day.opensAt ? ` title="오픈 예정: ${day.opensAt.replace('T', ' ')}"` : '';
+    const cls = ['day', stateCls, expanded ? 'expanded' : ''].join(' ').trim();
+    gridHtml += tappable
+      ? `<button class="${cls}" data-day="${day.date}"><span class="n">${n}</span>${hasPick ? '<span class="pickdot"></span>' : ''}</button>`
+      : `<div class="${cls}"${title}><span class="n">${n}</span></div>`;
+  }
+
+  const quickTimes = timesInMonth(product);
+  const quickHtml = quickTimes.length
+    ? `<div class="quick">
+        <p class="label">빠른 선택 — 이 시각을 이번 달 모든 날짜에 한 번에</p>
+        <div class="chips">${quickTimes.map((t) => {
+          const keys = keysForTime(product, t);
+          const on = keys.length > 0 && keys.every((k) => selected[product].has(k));
+          return `<button class="chip ${on ? 'on' : ''}" data-quick="${t}">${t}</button>`;
+        }).join('')}</div>
+      </div>`
+    : '';
+
+  const openDate = openDay[product];
+  const openSnap = openDate ? dayOf(product, openDate) : null;
+  const panelHtml = openSnap
+    ? `<div class="daypanel">
+        <p class="daypanel-head"><b>${Number(openSnap.date.slice(5,7))}월 ${Number(openSnap.date.slice(-2))}일(${DOW[openSnap.dow]})</b> 회차</p>
+        <div class="chips">${(openSnap.slots ?? []).map((s) => {
+          const on = selected[product].has(`${openSnap.date}|${s.time}`);
+          return `<button class="chip ${on ? 'on' : ''}" data-daytime="${s.time}">${s.time}<small>${s.available ? '여석 있음' : '매진'}</small></button>`;
+        }).join('') || '<p class="empty">이 날짜는 회차 정보가 없습니다.</p>'}</div>
+      </div>`
+    : '';
+
+  host.innerHTML = `
+    <div class="product-head">
+      <span class="tag ${product}"><span class="dot"></span>${PRODUCT_LABEL[product]}</span>
+    </div>
+    ${opennote ? `<p class="opennote">${opennote}</p>` : ''}
+    <div class="month"><strong>${y}년 ${m}월</strong></div>
+    <div class="grid">${DOW.map((d) => `<div class="dow">${d}</div>`).join('')}</div>
+    <div class="grid">${gridHtml}</div>
+    <p class="legend">
+      <span><i class="soldout"></i>매진(취소표 감시 가능)</span>
+      <span><i class="available"></i>지금 여석 있음</span>
+      <span><i class="pick"></i>내가 감시 중</span>
+    </p>
+    ${panelHtml}
+    ${quickHtml}
+    <p class="freshness">${freshnessText()}</p>
+  `;
+
+  for (const b of host.querySelectorAll('[data-day]')) {
     b.onclick = () => {
-      const t = b.dataset.t;
-      if (times.has(t)) times.delete(t); else times.add(t);
-      drawTimes(); refresh();
+      const date = b.dataset.day;
+      openDay[product] = openDay[product] === date ? null : date;
+      renderProduct(product);
     };
   }
-  $('tcount').textContent = times.size ? `· ${times.size}개 선택` : '';
-}
-
-function drawDow() {
-  $('dow').innerHTML = DOW.map((d) => `<div class="dow">${d}</div>`).join('');
-}
-
-function drawDays() {
-  const y = cursor.getFullYear(), m = cursor.getMonth();
-  $('label').textContent = `${y}년 ${m + 1}월`;
-  const now = new Date();
-  $('prev').disabled = new Date(y, m, 1) <= new Date(now.getFullYear(), now.getMonth(), 1);
-
-  const first = new Date(y, m, 1).getDay();
-  const total = new Date(y, m + 1, 0).getDate();
-  let html = '';
-  for (let i = 0; i < first; i++) html += '<div></div>';
-  for (let d = 1; d <= total; d++) {
-    const cell = new Date(y, m, d);
-    const key = iso(cell);
-    const bookable = OPEN_DOW.includes(cell.getDay()) && key >= today;
-    const cls = ['day', bookable ? 'open' : 'off', dates.has(key) ? 'on' : ''].join(' ');
-    html += `<button class="${cls}" ${bookable ? `data-d="${key}"` : 'disabled'}>${d}</button>`;
+  for (const b of host.querySelectorAll('[data-daytime]')) {
+    b.onclick = () => toggleSelected(product, openDay[product], b.dataset.daytime);
   }
-  $('days').innerHTML = html;
+  for (const b of host.querySelectorAll('[data-quick]')) {
+    b.onclick = () => toggleQuickTime(product, b.dataset.quick);
+  }
 }
-
-/**
- * 달력 위 드래그 선택.
- *
- * 버튼마다 click 핸들러를 다는 대신 컨테이너에서 포인터를 추적한다. 그래야
- * 손가락이 지나간 칸을 전부 잡을 수 있다. `touch-action: none`이 필요하다 —
- * 없으면 사파리가 이 제스처를 스크롤로 가져가 버린다.
- *
- * 드래그를 시작한 칸의 상태를 뒤집고, 지나가는 칸은 전부 같은 상태로 맞춘다.
- * 켜진 칸에서 시작하면 문지르는 만큼 꺼지고, 꺼진 칸에서 시작하면 켜진다.
- */
-(function dragSelect() {
-  const host = $('days');
-  let painting = null;   // true=켜기, false=끄기, null=드래그 아님
-
-  const dayAt = (x, y) => {
-    const el = document.elementFromPoint(x, y);
-    return el && el.dataset && el.dataset.d ? el : null;
-  };
-  const apply = (el) => {
-    if (!el) return;
-    const key = el.dataset.d;
-    if (painting) {
-      dates.add(key);
-      // 뺐던 날짜를 다시 켰는데 일부 회차가 돌아오지 않으면 고장으로 보인다.
-      for (const k of [...excluded]) if (k.startsWith(key + '|')) excluded.delete(k);
-    } else {
-      dates.delete(key);
-    }
-    el.classList.toggle('on', painting);
-  };
-
-  host.addEventListener('pointerdown', (e) => {
-    const el = dayAt(e.clientX, e.clientY);
-    if (!el) return;
-    painting = !dates.has(el.dataset.d);
-    apply(el);
-    // 포인터를 컨테이너에 붙들어야 손가락이 칸 밖으로 나가도 이벤트가 계속 온다.
-    host.setPointerCapture(e.pointerId);
-    e.preventDefault();
-  });
-
-  host.addEventListener('pointermove', (e) => {
-    if (painting === null) return;
-    apply(dayAt(e.clientX, e.clientY));
-  });
-
-  const end = () => { if (painting === null) return; painting = null; refresh(); };
-  host.addEventListener('pointerup', end);
-  host.addEventListener('pointercancel', end);
-})();
 
 function drawPicked() {
   const list = picks();
   $('picked').innerHTML = list.map((p, i) => {
-    const d = new Date(p.date + 'T00:00:00');
     return `<li>
       <span class="rank">${i + 1}</span>
-      <span class="what">${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]}) ${p.time}
-        <small>${KINDS.find(([v]) => v === kind)[1]}</small></span>
+      <span class="what">${Number(p.date.slice(5,7))}월 ${Number(p.date.slice(-2))}일 (${DOW[dowOf(p.date)]}) ${p.time}
+        <small><span class="dot ${p.product}" style="width:6px;height:6px"></span>${PRODUCT_LABEL[p.product]}</small></span>
       <button class="icon" data-up="${p.key}" aria-label="순서 올리기" ${i === 0 ? 'disabled' : ''}>↑</button>
       <button class="icon" data-rm="${p.key}" aria-label="빼기">×</button>
     </li>`;
@@ -426,12 +510,9 @@ function drawPicked() {
   }
   for (const b of $('picked').querySelectorAll('[data-rm]')) {
     b.onclick = () => {
-      const key = b.dataset.rm;
-      const [date] = key.split('|');
-      // 회차 선택을 건드리면 다른 날짜까지 영향을 받는다. 그래서 이 조합 하나만
-      // 제외 목록에 넣고, 그 날짜에 남는 회차가 없어지면 날짜 자체를 뺀다.
-      excluded.add(key);
-      if (!picks().some((p) => p.date === date)) { dates.delete(date); }
+      const [product, date, time] = b.dataset.rm.split('|');
+      selected[product].delete(`${date}|${time}`);
+      order = order.filter((k) => k !== b.dataset.rm);
       refresh();
     };
   }
@@ -441,14 +522,14 @@ function drawPicked() {
   $('go').disabled = list.length === 0;
   $('hint').textContent = list.length
     ? (token ? `누르면 ${list.length}건이 바로 등록됩니다` : `${list.length}건 — 신청서를 하나씩 열어야 합니다`)
-    : (times.size === 0 ? '회차를 고르세요' : '달력에서 날짜를 고르세요');
+    : '달력에서 날짜와 회차를 고르세요';
 }
 
 function issueBody(p, rank) {
   return [
     '### 관람 희망 날짜', '', p.date, '',
     '### 희망 회차', '', p.time, '',
-    '### 관람 종류', '', KINDS.find(([v]) => v === kind)[1], '',
+    '### 관람 종류', '', KIND_TEXT[p.product], '',
     '### 우선순위', '', String(Math.min(rank, 4)), '',
     '### 확인', '', '- [X] 본인 명의로 예약하며, 가지 못하게 되면 즉시 취소하겠습니다.',
   ].join('\n');
@@ -457,7 +538,7 @@ function issueBody(p, rank) {
 function issueUrl(p, rank) {
   const body = issueBody(p, rank);
   return `https://github.com/${REPO}/issues/new?labels=watch-request`
-    + `&title=${encodeURIComponent(`[감시] ${p.date} ${p.time}`)}`
+    + `&title=${encodeURIComponent(`[감시] ${PRODUCT_LABEL[p.product]} ${p.date} ${p.time}`)}`
     + `&body=${encodeURIComponent(body)}`;
 }
 
@@ -472,14 +553,14 @@ function issueUrl(p, rank) {
  * 그래서 사용자가 직접 누르는 링크로 바꿨다. 탭마다 사용자의 제스처가 있으니
  * 차단되지 않고, 무엇이 남았는지 눈에 보인다.
  */
+let opened = new Set();
 function drawSteps() {
   const list = picks();
   $('steps').innerHTML = list.map((p, i) => {
-    const d = new Date(p.date + 'T00:00:00');
     return `<li><a class="step ${opened.has(p.key) ? 'done' : ''}" data-k="${p.key}"
       href="${issueUrl(p, i + 1)}" target="_blank" rel="noopener">
       <span class="n">${opened.has(p.key) ? '✓' : i + 1}</span>
-      <span>${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]}) ${p.time}</span>
+      <span>${PRODUCT_LABEL[p.product]} · ${Number(p.date.slice(5,7))}월 ${Number(p.date.slice(-2))}일 (${DOW[dowOf(p.date)]}) ${p.time}</span>
       <span class="go-in">${opened.has(p.key) ? '열었음' : '열기'}</span>
     </a></li>`;
   }).join('');
@@ -490,9 +571,26 @@ function drawSteps() {
 }
 
 function refresh() {
-  drawDays(); drawPicked();
+  for (const product of PRODUCTS) renderProduct(product);
+  drawPicked();
   if (!$('submit').hidden) drawSteps();
   save();
+}
+
+/** 당월 가용성 스냅샷. 사이트에 직접 묻지 않고, 감시 시스템이 매 틱마다
+ *  같은 저장소에 커밋해 두는 정적 JSON을 읽는다 — CORS도, 토큰도 필요 없다. */
+async function loadAvailability() {
+  try {
+    const res = await fetch(`${DATA_URL}?t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(String(res.status));
+    availability = await res.json();
+  } catch {
+    availability = undefined; // "실패"와 "아직 응답 전(null)"을 구분한다
+    $('notice').hidden = false;
+    $('notice').innerHTML = '<b>달력 정보를 불러오지 못했습니다.</b> 감시 시스템이 아직 첫 실행을 마치지 않았거나, ' +
+      '일시적인 문제일 수 있습니다. 잠시 후 새로고침해 주세요.';
+  }
+  refresh();
 }
 
 /* ────────────────────────── 자동 등록 ──────────────────────────
@@ -606,6 +704,12 @@ $('cleartoken').onclick = () => {
 
 $('tokenlink').href = 'https://github.com/settings/personal-access-tokens/new';
 
+/** 이슈 본문에서 "관람 종류" 칸을 읽어 상품을 가른다. watch-requests.ts와 같은 규칙. */
+function productOf(body) {
+  const m = (body || '').match(/###\s*관람 종류\s*\n+([^\n#]+)/i);
+  return (m?.[1] || '').includes('렉처') ? 'lecture' : 'exhibition';
+}
+
 /** 지금 감시 중인 신청서를 보여준다. "돌고 있나?"에 답하는 화면이다. */
 async function loadLive() {
   if (!token) { $('livenone').hidden = false; return; }
@@ -630,14 +734,17 @@ async function loadLive() {
     } else if (body.includes('### 관람 희망 날짜') || (it.title || '').startsWith('[감시]')) {
       const date = (body.match(/### 관람 희망 날짜\s*\n+([^\n]+)/) || [])[1];
       const time = (body.match(/### 희망 회차\s*\n+([^\n]+)/) || [])[1];
-      rows.push({ alert: false, date: (date || '').trim(), time: (time || '').trim(), url: it.html_url, number: it.number });
+      rows.push({
+        alert: false, product: productOf(body),
+        date: (date || '').trim(), time: (time || '').trim(), url: it.html_url, number: it.number,
+      });
     }
   }
 
   rows.sort((a, b) => Number(b.alert) - Number(a.alert));
   $('live').innerHTML = rows.map((r) => r.alert
     ? `<li><span class="dot warn"></span><a href="${r.url}" target="_blank" rel="noopener">${r.title}</a></li>`
-    : `<li><span class="dot"></span><span style="flex:1">${r.date} ${r.time}</span>
+    : `<li><span class="dot ${r.product}"></span><span style="flex:1">${PRODUCT_LABEL[r.product]} · ${r.date} ${r.time}</span>
          <a href="${r.url}" target="_blank" rel="noopener" style="color:var(--muted);font-size:13px">#${r.number}</a></li>`
   ).join('');
 
@@ -660,6 +767,9 @@ async function loadLive() {
  *
  * 조용히 멈추는 감시는 없는 감시보다 나쁘다. 없으면 직접 보기라도 한다.
  * 그래서 "마지막으로 언제 돌았는지"를 항상 보이게 둔다.
+ *
+ * 지금은 화~토 24시간, 5분 간격(105분씩 스스로 이어지는 실행)으로 돈다 —
+ * "감시 시간대" 개념 자체가 없으므로, 그냥 마지막 실행이 얼마나 됐는지만 본다.
  */
 async function loadLastRun() {
   if (!token) { $('lastrun').textContent = ''; return; }
@@ -687,19 +797,19 @@ async function loadLastRun() {
   const ago = minutes < 1 ? '방금' : minutes < 60 ? `${minutes}분 전`
     : minutes < 1440 ? `${Math.round(minutes / 60)}시간 전` : `${Math.round(minutes / 1440)}일 전`;
 
-  // 감시는 수~토 09~22시(KST)에만 돈다. 그 시간대가 아니면 오래됐어도 정상이다.
+  // 화~토는 24시간 돈다. 그 요일이면 20분 넘게 안 돌았을 때만 경고한다
+  // (5분 간격 폴링 + 여유). 일·월은 원래 쉬는 요일이라 오래돼도 정상이다.
   const kst = new Date(Date.now() + 9 * 3600_000);
-  const watching = kst.getUTCDay() >= 3 && kst.getUTCDay() <= 6
-    && kst.getUTCHours() >= 9 && kst.getUTCHours() < 22;
-  const stale = watching && minutes > 30;
+  const watchingDay = kst.getUTCDay() >= 2 && kst.getUTCDay() <= 6;
+  const stale = watchingDay && minutes > 20;
 
   $('lastrun').innerHTML = stale
-    ? `⚠️ <b>마지막 확인이 ${ago}입니다.</b> 지금은 10분마다 돌아야 하는 시간대입니다 — 감시가 멈췄을 수 있습니다.`
-    : `마지막 확인: <b>${ago}</b>${watching ? '' : ' (지금은 감시 시간대가 아닙니다)'}`;
+    ? `⚠️ <b>마지막 확인이 ${ago}입니다.</b> 지금은 5분마다 돌아야 하는 요일입니다 — 감시가 멈췄을 수 있습니다.`
+    : `마지막 확인: <b>${ago}</b>${watchingDay ? '' : ' (일·월은 쉽니다)'}`;
   $('lastrun').className = stale ? 'bad' : 'note';
 }
 
-/** 이미 같은 날짜·회차를 감시 중인지. 중복 신청을 만들지 않는다. */
+/** 이미 같은 상품·날짜·회차를 감시 중인지. 중복 신청을 만들지 않는다. */
 async function existingKeys() {
   const keys = new Set();
   try {
@@ -709,7 +819,7 @@ async function existingKeys() {
       const body = it.body || '';
       const date = (body.match(/### 관람 희망 날짜\s*\n+([^\n]+)/) || [])[1];
       const time = (body.match(/### 희망 회차\s*\n+([^\n]+)/) || [])[1];
-      if (date && time) keys.add(`${date.trim()}|${time.trim()}`);
+      if (date && time) keys.add(`${productOf(body)}|${date.trim()}|${time.trim()}`);
     }
   } catch { /* 못 읽으면 중복 검사만 생략한다 — 등록 자체는 막지 않는다 */ }
   return keys;
@@ -728,7 +838,7 @@ async function registerAll() {
       const res = await api('/issues', {
         method: 'POST',
         body: JSON.stringify({
-          title: `[감시] ${p.date} ${p.time}`,
+          title: `[감시] ${PRODUCT_LABEL[p.product]} ${p.date} ${p.time}`,
           body: issueBody(p, i + 1),
           labels: ['watch-request'],
         }),
@@ -748,10 +858,9 @@ function drawResults(results, total) {
   const mark = { ok: '✅ 등록됨', dup: '이미 감시 중', fail: '⚠️ 실패' };
   $('progress').textContent = `· ${results.length}/${total}`;
   $('steps').innerHTML = results.map((r) => {
-    const d = new Date(r.p.date + 'T00:00:00');
     return `<li><div class="step ${r.state === 'fail' ? '' : 'done'}">
       <span class="n">${r.state === 'fail' ? '!' : '✓'}</span>
-      <span>${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]}) ${r.p.time}</span>
+      <span>${PRODUCT_LABEL[r.p.product]} · ${Number(r.p.date.slice(5,7))}월 ${Number(r.p.date.slice(-2))}일 (${DOW[dowOf(r.p.date)]}) ${r.p.time}</span>
       <span class="go-in">${mark[r.state]}${r.code ? ` (${r.code})` : ''}</span>
     </div></li>`;
   }).join('');
@@ -766,8 +875,6 @@ $('go').onclick = () => {
 };
 
 $('mylist').href = `https://github.com/${REPO}/issues?q=is%3Aissue+is%3Aopen+label%3Awatch-request`;
-$('prev').onclick = () => { cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1); drawDays(); };
-$('next').onclick = () => { cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1); drawDays(); };
 
 /* 예약 정보 — 이 브라우저에만 남는다. 커밋되지도, 전송되지도 않는다. */
 const ME = ['myname', 'myemail', 'myphone'];
@@ -799,7 +906,9 @@ setAuthState(token
   token ? 'ok' : 'note');
 
 load();
-drawKinds(); drawTimes(); drawDow(); refresh();
+for (const product of PRODUCTS) renderProduct(product);
+drawPicked();
+void loadAvailability();
 void loadLive();
 void loadLastRun();
 </script>
