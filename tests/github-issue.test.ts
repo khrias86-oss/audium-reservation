@@ -14,6 +14,7 @@ const watch: Watch = {
 const booked: Notification = { kind: 'BOOKED', watch, slot, confirmationId: 'C1' };
 const needsAction: Notification = {
   kind: 'NEEDS_ACTION', watch, slot, reason: '본인인증 요구', resumeUrl: 'https://audeum.org/booking',
+  product: 'exhibition',
 };
 const warning: Notification = { kind: 'SYSTEM_WARNING', reason: '사이트 구조 변경' };
 
@@ -175,6 +176,21 @@ describe('알림 본문', () => {
     expect(body.body).toContain('인증번호 발송');
     expect(body.body).toContain('사람인지 확인');
     expect(body.body).toContain(needsAction.slot.time);
+  });
+
+  it('요일을 UTC 기준으로 계산한다 — 실행 환경 타임존과 무관하게 같은 답이 나와야 한다', async () => {
+    // 2026-09-19는 토요일이다. 예전엔 +09:00을 붙인 로컬 Date로 getDay()를
+    // 불러서, UTC로 도는 Actions에서 "금"으로 잘못 나간 적이 있다 (실제 이슈 #15).
+    const saturday: Notification = { ...needsAction, slot: { ...slot, date: '2026-09-19', time: '13:30' } };
+    const body = await captureBody(saturday);
+    expect(body.body).toContain('2026-09-19 (토)');
+  });
+
+  it('렉처 감시는 "전시"가 아니라 "렉처 프로그램" 카드를 누르라고 안내한다', async () => {
+    const lecture: Notification = { ...needsAction, product: 'lecture' };
+    const body = await captureBody(lecture);
+    expect(body.body).toContain('렉처 프로그램** 카드를 누릅니다');
+    expect(body.body).not.toContain('**전시** 카드를 누릅니다');
   });
 
   it('회차 식별자가 있으면 적고, 없으면 지어내지 않는다', async () => {

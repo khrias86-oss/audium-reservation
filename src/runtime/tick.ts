@@ -191,7 +191,11 @@ async function claim(
       // CAPTCHA·본인인증은 자동화 대상이 아니다 (§2.6). 즉시 사람에게 넘긴다.
       current = applyEvent(current, { type: 'CLAIM_FAILED', retriesLeft: 0 }).watch;
       await store.saveWatch(current);
-      await notifier.send({ kind: 'NEEDS_ACTION', watch: current, slot, reason: outcome.reason, resumeUrl: outcome.resumeUrl });
+      // tick.ts는 아직 프로그램(전시/렉처)을 구분하지 않는 완전판 파이프라인 초안이다
+      // (핵심 Watch 타입 자체에 product가 없다). 실제로 도는 경로는 watch-once.ts이고
+      // 거기서는 프로그램별로 완전히 분리해 처리한다. 여기서는 지금 유일하게
+      // 다루는 상품인 'exhibition'을 그대로 쓴다.
+      await notifier.send({ kind: 'NEEDS_ACTION', watch: current, slot, reason: outcome.reason, resumeUrl: outcome.resumeUrl, product: 'exhibition' });
       return { outcome: 'NEEDS_HUMAN', log: [...log, `[${watch.id}] 사람 개입 필요: ${outcome.reason}`] };
     }
 
@@ -213,6 +217,7 @@ async function claim(
         kind: 'NEEDS_ACTION', watch: current, slot,
         reason: `자동 예약에 실패했습니다: ${outcome.reason}`,
         resumeUrl: slot.bookUrl,
+        product: 'exhibition', // 위와 같은 이유
       });
       return { outcome: 'NEEDS_HUMAN', log };
     }
