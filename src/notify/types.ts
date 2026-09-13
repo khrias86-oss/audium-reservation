@@ -10,6 +10,12 @@ export type Notification =
       readonly resumeUrl: string | null;
       /** 사이트가 이 회차에 붙인 식별자. 화면에서 어느 회차인지 짚어 준다. */
       readonly reserveSeq?: string | null;
+      /**
+       * 전시와 렉처는 예약 화면에서 처음 누르는 카드부터 다르다. 이 값이 없으면
+       * 알림의 순서표 1번이 항상 "전시"라고 말하게 되는데, 렉처 감시자에게는
+       * 틀린 안내다.
+       */
+      readonly product: 'exhibition' | 'lecture';
     }
   | { readonly kind: 'SYSTEM_WARNING'; readonly reason: string };
 

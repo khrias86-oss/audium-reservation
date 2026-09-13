@@ -147,7 +147,14 @@ function bodyFor(n: Notification): string {
       // 요구한다(`docs/auto-booking.md`). 그 둘은 사람만 통과할 수 있으므로
       // 시스템이 대신 눌러 줄 수 없다. 대신 **무엇을 어떤 순서로 누를지**를
       // 미리 적어 두면 화면에서 헤매는 시간이 사라진다.
-      const dow = ['일', '월', '화', '수', '목', '금', '토'][new Date(`${n.slot.date}T00:00:00+09:00`).getDay()];
+      // getDay()가 아니라 getUTCDay()를 쓴다. +09:00을 붙여 로컬 Date로 만들면
+      // .getDay()가 *실행 환경의* 시스템 타임존으로 요일을 읽어서, UTC로 도는
+      // Actions에서는 하루 밀린 요일이 나온다 — 실제로 그렇게 틀려서 나갔다
+      // (2026-09-19 토요일을 "금"으로 알린 적이 있다). 날짜 문자열 자체가 이미
+      // KST 달력일이므로, UTC 자정으로 파싱해 UTC로 요일만 읽으면 실행 환경과
+      // 무관하게 항상 같은 답이 나온다.
+      const dow = ['일', '월', '화', '수', '목', '금', '토'][new Date(`${n.slot.date}T00:00:00Z`).getUTCDay()];
+      const card = n.product === 'lecture' ? '렉처 프로그램' : '전시';
       return [
         `# 👉 [오디움 예약 페이지 열기](${n.resumeUrl ?? 'https://audeum.org/booking'})`,
         '',
@@ -156,7 +163,7 @@ function bodyFor(n: Notification): string {
         '',
         '### 순서대로 누르세요 (약 1분)',
         '',
-        '1. **전시** 카드를 누릅니다',
+        `1. **${card}** 카드를 누릅니다`,
         '2. 인원에서 **＋** 를 눌러 1명으로 맞춥니다',
         `3. 달력에서 **${Number(n.slot.date.slice(8))}일** → 회차 **${n.slot.time}** 을 누릅니다`,
         '4. 이름·이메일을 넣고 **내국인**을 고릅니다',
