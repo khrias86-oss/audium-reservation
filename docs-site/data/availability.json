@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-13T08:08:24.659Z",
+  "generatedAt": "2026-09-15T04:43:54.752Z",
   "products": [
     {
       "product": "exhibition",
@@ -68,14 +68,12 @@
         {
           "date": "2026-09-13",
           "dow": 0,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "PAST"
         },
         {
           "date": "2026-09-14",
           "dow": 1,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "PAST"
         },
         {
           "date": "2026-09-15",
@@ -305,14 +303,12 @@
         {
           "date": "2026-09-13",
           "dow": 0,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "PAST"
         },
         {
           "date": "2026-09-14",
           "dow": 1,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "PAST"
         },
         {
           "date": "2026-09-15",
