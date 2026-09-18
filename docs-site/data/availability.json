@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-18T20:20:25.358Z",
+  "generatedAt": "2026-09-18T22:01:32.144Z",
   "products": [
     {
       "product": "exhibition",
@@ -106,11 +106,11 @@
             },
             {
               "time": "11:00",
-              "available": false
+              "available": true
             },
             {
               "time": "13:30",
-              "available": true
+              "available": false
             },
             {
               "time": "14:30",
