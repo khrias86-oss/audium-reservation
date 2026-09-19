@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-19T08:08:16.983Z",
+  "generatedAt": "2026-09-19T17:11:11.705Z",
   "products": [
     {
       "product": "exhibition",
@@ -98,8 +98,7 @@
         {
           "date": "2026-09-19",
           "dow": 6,
-          "state": "NOT_OPEN",
-          "opensAt": "2026-09-08T14:00:00"
+          "state": "PAST"
         },
         {
           "date": "2026-09-20",
@@ -266,8 +265,7 @@
         {
           "date": "2026-09-19",
           "dow": 6,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "PAST"
         },
         {
           "date": "2026-09-20",
