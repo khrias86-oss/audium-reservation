@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-19T17:11:11.705Z",
+  "generatedAt": "2026-09-22T04:41:57.607Z",
   "products": [
     {
       "product": "exhibition",
@@ -103,14 +103,12 @@
         {
           "date": "2026-09-20",
           "dow": 0,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "PAST"
         },
         {
           "date": "2026-09-21",
           "dow": 1,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "PAST"
         },
         {
           "date": "2026-09-22",
@@ -270,14 +268,12 @@
         {
           "date": "2026-09-20",
           "dow": 0,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "PAST"
         },
         {
           "date": "2026-09-21",
           "dow": 1,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "PAST"
         },
         {
           "date": "2026-09-22",
@@ -330,8 +326,17 @@
         {
           "date": "2026-09-30",
           "dow": 3,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "AVAILABLE",
+          "slots": [
+            {
+              "time": "10:00",
+              "available": true
+            },
+            {
+              "time": "14:00",
+              "available": true
+            }
+          ]
         }
       ]
     }
