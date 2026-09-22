@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-22T04:41:57.607Z",
+  "generatedAt": "2026-09-22T11:26:19.228Z",
   "products": [
     {
       "product": "exhibition",
@@ -125,8 +125,29 @@
         {
           "date": "2026-09-24",
           "dow": 4,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "SOLD_OUT",
+          "slots": [
+            {
+              "time": "10:00",
+              "available": false
+            },
+            {
+              "time": "11:00",
+              "available": false
+            },
+            {
+              "time": "13:30",
+              "available": false
+            },
+            {
+              "time": "14:30",
+              "available": false
+            },
+            {
+              "time": "15:30",
+              "available": false
+            }
+          ]
         },
         {
           "date": "2026-09-25",
@@ -137,8 +158,29 @@
         {
           "date": "2026-09-26",
           "dow": 6,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "SOLD_OUT",
+          "slots": [
+            {
+              "time": "10:00",
+              "available": false
+            },
+            {
+              "time": "11:00",
+              "available": false
+            },
+            {
+              "time": "13:30",
+              "available": false
+            },
+            {
+              "time": "14:30",
+              "available": false
+            },
+            {
+              "time": "15:30",
+              "available": false
+            }
+          ]
         },
         {
           "date": "2026-09-27",
