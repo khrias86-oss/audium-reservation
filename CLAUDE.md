@@ -39,9 +39,14 @@ Cloud Run은 브라우저가 필요할 때의 대안이었는데 브라우저를
 (크로미움 설치 23초 + 조작 21초).
 
 **저장소는 public이다.** 그래서 Actions 시간이 무제한 무료이고, 예산이 설계를
-지배하던 국면이 끝났다. 지금은 **화~토 24시간 5분 간격**으로 돈다 (하루 288회).
-5분은 사이트 부담을 고려해 정한 하한이라 예산과 무관하게 유지한다.
-근거는 `.github/workflows/watch.yml` 머리말에 적어 두었다.
+지배하던 국면이 끝났다. 설계상 평시에는 **화~토 24시간 5분 간격**으로 돌게
+되어 있다 (하루 288회). 5분은 사이트 부담을 고려해 정한 하한이라 예산과
+무관하게 유지한다. 근거는 `.github/workflows/watch.yml` 머리말에 적어 두었다.
+
+**단, 2026-10-09부로 자동 스케줄(`schedule:`)은 꺼져 있다** — 사용자 요청으로
+멈췄다. `workflow_dispatch`(Actions 탭 → Run workflow)로 수동 실행은 여전히
+된다. 다시 상시 감시를 켜려면 `watch.yml`의 주석 처리된 `schedule:` 블록을
+되살리면 된다.
 
 감시 신청 페이지는 **GitHub Pages가 1차 배포처다**
 (`https://khrias86-oss.github.io/audium-reservation/`, `.github/workflows/pages.yml`).
