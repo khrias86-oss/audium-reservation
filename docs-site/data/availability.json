@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-20T04:37:59.951Z",
+  "generatedAt": "2026-10-20T11:23:47.908Z",
   "products": [
     {
       "product": "exhibition",
@@ -115,20 +115,83 @@
         {
           "date": "2026-10-22",
           "dow": 4,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "SOLD_OUT",
+          "slots": [
+            {
+              "time": "10:00",
+              "available": false
+            },
+            {
+              "time": "11:00",
+              "available": false
+            },
+            {
+              "time": "13:30",
+              "available": false
+            },
+            {
+              "time": "14:30",
+              "available": false
+            },
+            {
+              "time": "15:30",
+              "available": false
+            }
+          ]
         },
         {
           "date": "2026-10-23",
           "dow": 5,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "SOLD_OUT",
+          "slots": [
+            {
+              "time": "10:00",
+              "available": false
+            },
+            {
+              "time": "11:00",
+              "available": false
+            },
+            {
+              "time": "13:30",
+              "available": false
+            },
+            {
+              "time": "14:30",
+              "available": false
+            },
+            {
+              "time": "15:30",
+              "available": false
+            }
+          ]
         },
         {
           "date": "2026-10-24",
           "dow": 6,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "SOLD_OUT",
+          "slots": [
+            {
+              "time": "10:00",
+              "available": false
+            },
+            {
+              "time": "11:00",
+              "available": false
+            },
+            {
+              "time": "13:30",
+              "available": false
+            },
+            {
+              "time": "14:30",
+              "available": false
+            },
+            {
+              "time": "15:30",
+              "available": false
+            }
+          ]
         },
         {
           "date": "2026-10-25",
@@ -157,20 +220,83 @@
         {
           "date": "2026-10-29",
           "dow": 4,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "SOLD_OUT",
+          "slots": [
+            {
+              "time": "10:00",
+              "available": false
+            },
+            {
+              "time": "11:00",
+              "available": false
+            },
+            {
+              "time": "13:30",
+              "available": false
+            },
+            {
+              "time": "14:30",
+              "available": false
+            },
+            {
+              "time": "15:30",
+              "available": false
+            }
+          ]
         },
         {
           "date": "2026-10-30",
           "dow": 5,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "SOLD_OUT",
+          "slots": [
+            {
+              "time": "10:00",
+              "available": false
+            },
+            {
+              "time": "11:00",
+              "available": false
+            },
+            {
+              "time": "13:30",
+              "available": false
+            },
+            {
+              "time": "14:30",
+              "available": false
+            },
+            {
+              "time": "15:30",
+              "available": false
+            }
+          ]
         },
         {
           "date": "2026-10-31",
           "dow": 6,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "SOLD_OUT",
+          "slots": [
+            {
+              "time": "10:00",
+              "available": false
+            },
+            {
+              "time": "11:00",
+              "available": false
+            },
+            {
+              "time": "13:30",
+              "available": false
+            },
+            {
+              "time": "14:30",
+              "available": false
+            },
+            {
+              "time": "15:30",
+              "available": false
+            }
+          ]
         }
       ]
     },
