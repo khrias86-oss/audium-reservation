@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-21T13:41:42.107Z",
+  "generatedAt": "2026-10-21T18:33:00.625Z",
   "products": [
     {
       "product": "exhibition",
@@ -108,8 +108,7 @@
         {
           "date": "2026-10-21",
           "dow": 3,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "PAST"
         },
         {
           "date": "2026-10-22",
@@ -168,7 +167,7 @@
         {
           "date": "2026-10-24",
           "dow": 6,
-          "state": "AVAILABLE",
+          "state": "SOLD_OUT",
           "slots": [
             {
               "time": "10:00",
@@ -176,7 +175,7 @@
             },
             {
               "time": "11:00",
-              "available": true
+              "available": false
             },
             {
               "time": "13:30",
@@ -406,8 +405,7 @@
         {
           "date": "2026-10-21",
           "dow": 3,
-          "state": "NOT_OPEN",
-          "opensAt": null
+          "state": "PAST"
         },
         {
           "date": "2026-10-22",
