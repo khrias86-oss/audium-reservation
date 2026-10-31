@@ -1,325 +1,373 @@
 {
-  "generatedAt": "2026-10-31T12:11:44.856Z",
+  "generatedAt": "2026-10-31T18:27:02.747Z",
   "products": [
     {
       "product": "exhibition",
-      "month": "2026-10",
+      "month": "2026-11",
       "days": [
         {
-          "date": "2026-10-01",
-          "dow": 4,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-02",
-          "dow": 5,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-03",
-          "dow": 6,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-04",
+          "date": "2026-11-01",
           "dow": 0,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-05",
+          "date": "2026-11-02",
           "dow": 1,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-06",
+          "date": "2026-11-03",
           "dow": 2,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-07",
+          "date": "2026-11-04",
           "dow": 3,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-08",
+          "date": "2026-11-05",
           "dow": 4,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-09",
+          "date": "2026-11-06",
           "dow": 5,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-10",
-          "dow": 6,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-11",
-          "dow": 0,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-12",
-          "dow": 1,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-13",
-          "dow": 2,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-14",
-          "dow": 3,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-15",
-          "dow": 4,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-16",
-          "dow": 5,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-17",
-          "dow": 6,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-18",
-          "dow": 0,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-19",
-          "dow": 1,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-20",
-          "dow": 2,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-21",
-          "dow": 3,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-22",
-          "dow": 4,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-23",
-          "dow": 5,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-24",
-          "dow": 6,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-25",
-          "dow": 0,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-26",
-          "dow": 1,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-27",
-          "dow": 2,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-28",
-          "dow": 3,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-29",
-          "dow": 4,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-30",
-          "dow": 5,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-31",
+          "date": "2026-11-07",
           "dow": 6,
           "state": "NOT_OPEN",
-          "opensAt": "2026-10-20T14:00:00"
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-08",
+          "dow": 0,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-09",
+          "dow": 1,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-10",
+          "dow": 2,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-11",
+          "dow": 3,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-12",
+          "dow": 4,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-13",
+          "dow": 5,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-14",
+          "dow": 6,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-15",
+          "dow": 0,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-16",
+          "dow": 1,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-17",
+          "dow": 2,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-18",
+          "dow": 3,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-19",
+          "dow": 4,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-20",
+          "dow": 5,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-21",
+          "dow": 6,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-22",
+          "dow": 0,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-23",
+          "dow": 1,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-24",
+          "dow": 2,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-25",
+          "dow": 3,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-26",
+          "dow": 4,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-27",
+          "dow": 5,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-28",
+          "dow": 6,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-29",
+          "dow": 0,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-30",
+          "dow": 1,
+          "state": "NOT_OPEN",
+          "opensAt": null
         }
       ]
     },
     {
       "product": "lecture",
-      "month": "2026-10",
+      "month": "2026-11",
       "days": [
         {
-          "date": "2026-10-01",
-          "dow": 4,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-02",
-          "dow": 5,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-03",
-          "dow": 6,
-          "state": "PAST"
-        },
-        {
-          "date": "2026-10-04",
+          "date": "2026-11-01",
           "dow": 0,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-05",
+          "date": "2026-11-02",
           "dow": 1,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-06",
+          "date": "2026-11-03",
           "dow": 2,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-07",
+          "date": "2026-11-04",
           "dow": 3,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-08",
+          "date": "2026-11-05",
           "dow": 4,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-09",
+          "date": "2026-11-06",
           "dow": 5,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-10",
+          "date": "2026-11-07",
           "dow": 6,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-11",
+          "date": "2026-11-08",
           "dow": 0,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-12",
+          "date": "2026-11-09",
           "dow": 1,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-13",
+          "date": "2026-11-10",
           "dow": 2,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-14",
+          "date": "2026-11-11",
           "dow": 3,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-15",
+          "date": "2026-11-12",
           "dow": 4,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-16",
+          "date": "2026-11-13",
           "dow": 5,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-17",
+          "date": "2026-11-14",
           "dow": 6,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-18",
+          "date": "2026-11-15",
           "dow": 0,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-19",
+          "date": "2026-11-16",
           "dow": 1,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-20",
+          "date": "2026-11-17",
           "dow": 2,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-21",
+          "date": "2026-11-18",
           "dow": 3,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-22",
+          "date": "2026-11-19",
           "dow": 4,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-23",
+          "date": "2026-11-20",
           "dow": 5,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-24",
+          "date": "2026-11-21",
           "dow": 6,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-25",
+          "date": "2026-11-22",
           "dow": 0,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-26",
+          "date": "2026-11-23",
           "dow": 1,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-27",
+          "date": "2026-11-24",
           "dow": 2,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-28",
+          "date": "2026-11-25",
           "dow": 3,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-29",
+          "date": "2026-11-26",
           "dow": 4,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-30",
+          "date": "2026-11-27",
           "dow": 5,
-          "state": "PAST"
+          "state": "NOT_OPEN",
+          "opensAt": null
         },
         {
-          "date": "2026-10-31",
+          "date": "2026-11-28",
           "dow": 6,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-29",
+          "dow": 0,
+          "state": "NOT_OPEN",
+          "opensAt": null
+        },
+        {
+          "date": "2026-11-30",
+          "dow": 1,
           "state": "NOT_OPEN",
           "opensAt": null
         }
