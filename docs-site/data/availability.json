@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T01:48:14.322Z",
+  "generatedAt": "2026-11-07T08:39:34.096Z",
   "products": [
     {
       "product": "exhibition",
@@ -38,25 +38,8 @@
         {
           "date": "2026-11-07",
           "dow": 6,
-          "state": "AVAILABLE",
-          "slots": [
-            {
-              "time": "11:00",
-              "available": false
-            },
-            {
-              "time": "13:30",
-              "available": false
-            },
-            {
-              "time": "14:30",
-              "available": false
-            },
-            {
-              "time": "15:30",
-              "available": true
-            }
-          ]
+          "state": "NOT_OPEN",
+          "opensAt": "2026-11-03T14:00:00"
         },
         {
           "date": "2026-11-08",
