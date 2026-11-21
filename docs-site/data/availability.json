@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T21:45:32.497Z",
+  "generatedAt": "2026-11-21T03:06:23.424Z",
   "products": [
     {
       "product": "exhibition",
@@ -110,14 +110,6 @@
           "dow": 6,
           "state": "SOLD_OUT",
           "slots": [
-            {
-              "time": "10:00",
-              "available": false
-            },
-            {
-              "time": "11:00",
-              "available": false
-            },
             {
               "time": "13:30",
               "available": false
