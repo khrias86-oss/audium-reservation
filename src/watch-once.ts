@@ -17,6 +17,7 @@
  * 실제 예약은 `DRY_RUN=false`가 명시적으로 설정될 때만 한다. 기본값은 확인만이다.
  */
 import { fetchOpenDates, fetchSlotsForDates, type Product } from './adapters/audeum/http-flow.js';
+import { ACTIVE_PRODUCTS } from './adapters/audeum/contract.js';
 import { prepareBooking } from './booking/prepare.js';
 import { parseWatchRequests, type WatchRequest } from './config/watch-requests.js';
 import { createGitHubIssueNotifier } from './notify/github-issue.js';
@@ -243,9 +244,13 @@ async function main(): Promise<void> {
   const notifier = createGitHubIssueNotifier({ owner: owner!, repo: repo!, token: token! });
   let matchedTotal = 0;
 
-  // 전시와 렉처를 완전히 분리해서 처리한다. 한쪽에 신청이 없으면 그 상품은
-  // 아예 조회하지 않는다 — 있지도 않은 걸 확인하는 것은 사이트에 헛된 부하다.
-  for (const product of ['exhibition', 'lecture'] as const) {
+  for (const request of requests.filter((r) => !ACTIVE_PRODUCTS.includes(r.product))) {
+    say(`- #${request.issueNumber}: ${PRODUCT_LABEL[request.product]} 감시는 꺼져 있어 확인하지 않습니다`);
+  }
+
+  // 상품마다 완전히 분리해서 처리한다. 신청이 없는 상품은 아예 조회하지 않는다 —
+  // 있지도 않은 걸 확인하는 것은 사이트에 헛된 부하다.
+  for (const product of ACTIVE_PRODUCTS) {
     const forProduct = requests.filter((r) => r.product === product);
     if (forProduct.length === 0) continue;
     matchedTotal += await checkProduct(product, forProduct, notifier);
