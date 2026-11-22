@@ -13,8 +13,11 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fetchOpenDates, fetchSlotsForDates } from './adapters/audeum/http-flow.js';
 import { ACTIVE_PRODUCTS } from './adapters/audeum/contract.js';
-import { buildProductSnapshot, wrapSnapshot, toKstDateString } from './adapters/audeum/build-snapshot.js';
-import type { ProductSnapshot } from './adapters/audeum/build-snapshot.js';
+import { buildProductSnapshot, newlyOpenedDates, wrapSnapshot, toKstDateString } from './adapters/audeum/build-snapshot.js';
+import type { FullSnapshot, ProductSnapshot } from './adapters/audeum/build-snapshot.js';
+import { createGitHubIssueNotifier } from './notify/github-issue.js';
+import { createFamilyNotifier, familyConfigFromEnv, fanOut } from './notify/family.js';
+import type { Notification } from './notify/types.js';
 import type { Slot } from './core/types.js';
 
 const OUT_PATH = 'docs-site/data/availability.json';
@@ -27,8 +30,10 @@ async function snapshotFor(product: 'exhibition' | 'lecture', today: string): Pr
     // 열린 날짜조차 못 받았다. 빈 스냅샷보다는 "지금 이 페이지가 낡았을 수
     // 있다"는 신호가 낫지만, 스키마를 어지럽히지 않기 위해 빈 목록으로
     // 처리하고 generatedAt으로 낡음을 드러낸다 (호출부가 갱신 시각을 본다).
-    console.error(`[${product}] 날짜 목록을 못 받았습니다: ${open.kind === 'QUEUED' ? open.message : open.reason}`);
-    return buildProductSnapshot(product, today, [], new Map());
+    const why = open.kind === 'QUEUED' ? open.message : open.reason;
+    console.error(`[${product}] 날짜 목록을 못 받았습니다: ${why}`);
+    // 예전에는 빈 목록으로 그려서 실패가 "아직 안 열림"으로 보였다 (렉처가 두 달간 그랬다).
+    return buildProductSnapshot(product, today, [], new Map(), { error: why });
   }
 
   const { result, perDate } = await fetchSlotsForDates(open.dates.map((d) => d.date), product);
@@ -80,28 +85,84 @@ function commitIfChanged(path: string): void {
   }
 }
 
+/**
+ * 직전 스냅샷과 비교해 알릴 것을 고른다 — 새로 열린 날짜, 곧 열릴 것 같은 오픈.
+ *
+ * 오픈 예고는 예상 시각 90분 전부터 그 시각까지만 보낸다. 같은 날 두 번 보내지
+ * 않는 것은 이슈 라벨(`opening-soon:날짜`)이 맡는다.
+ */
+export function notificationsFor(previous: FullSnapshot | null, next: FullSnapshot, now: Date): Notification[] {
+  const out: Notification[] = [];
+  for (const product of next.products) {
+    const before = previous?.products.find((p) => p.product === product.product);
+    // 예전 스키마(한 달짜리)의 스냅샷도 날짜별 상태는 같으므로 그대로 비교한다.
+    const opened = newlyOpenedDates(before, product);
+    if (opened.length > 0) out.push({ kind: 'OPENED', product: product.product, dates: opened });
+
+    const guess = product.nextOpenGuess;
+    if (guess) {
+      const at = Date.parse(`${guess.slice(0, 19)}+09:00`);
+      const t = now.getTime();
+      if (at - 90 * 60_000 <= t && t < at) out.push({ kind: 'OPENING_SOON', product: product.product, at: guess });
+    }
+  }
+  return out;
+}
+
+async function notify(list: readonly Notification[]): Promise<void> {
+  if (list.length === 0) return;
+  const token = process.env['GITHUB_TOKEN'];
+  const [owner, repo] = (process.env['GITHUB_REPOSITORY'] ?? '').split('/');
+  if (!token || !owner || !repo) {
+    console.log(`알릴 것이 ${list.length}건 있지만 GITHUB_TOKEN이 없어 보내지 않습니다 (로컬 실행).`);
+    return;
+  }
+  const log = (line: string) => console.log(line);
+  const notifier = fanOut(
+    createGitHubIssueNotifier({ owner, repo, token }),
+    [createFamilyNotifier(familyConfigFromEnv(process.env, log))],
+    log,
+  );
+  for (const n of list) {
+    try {
+      const sent = await notifier.send(n);
+      console.log(`${n.kind}: ${sent === false ? '이미 알림 — 건너뜀' : '알림 보냄'}`);
+    } catch (error) {
+      // 알림 실패가 스냅샷 커밋을 막으면 안 된다. 달력은 그것대로 갱신돼야 한다.
+      console.error(`${n.kind} 알림 실패:`, error instanceof Error ? error.message : String(error));
+    }
+  }
+}
+
 export async function main(): Promise<void> {
-  const today = toKstDateString(new Date());
+  const now = new Date();
+  const today = toKstDateString(now);
   const products = await Promise.all(ACTIVE_PRODUCTS.map((product) => snapshotFor(product, today)));
 
-  const snapshot = wrapSnapshot(new Date(), products);
+  const snapshot = wrapSnapshot(now, products);
   const json = JSON.stringify(snapshot, null, 2) + '\n';
 
   mkdirSync('docs-site/data', { recursive: true });
 
-  // 내용이 진짜 바뀌었는지는 git status가 판단하게 둔다. generatedAt이 매번
-  // 바뀌므로 파일 자체는 항상 "다르지만", 그건 진짜 변화가 아니다 — 그래서
-  // 아래에서 generatedAt을 뺀 내용을 비교해 실질적인 변화가 없으면 아예
-  // 쓰지 않는다.
-  const previous = existsSync(OUT_PATH) ? readFileSync(OUT_PATH, 'utf8') : null;
-  const withoutStamp = (text: string) => text.replace(/"generatedAt":\s*"[^"]*"/, '');
-  if (previous !== null && withoutStamp(previous) === withoutStamp(json)) {
-    console.log('가용성에 실질적인 변화가 없어 파일을 갱신하지 않습니다.');
-    return;
+  const previousText = existsSync(OUT_PATH) ? readFileSync(OUT_PATH, 'utf8') : null;
+  let previous: FullSnapshot | null = null;
+  try {
+    previous = previousText ? (JSON.parse(previousText) as FullSnapshot) : null;
+  } catch {
+    previous = null; // 깨진 파일과 비교해 거짓 "오픈" 알림을 내느니 이번엔 비교하지 않는다.
   }
 
-  writeFileSync(OUT_PATH, json);
-  commitIfChanged(OUT_PATH);
+  // 내용이 진짜 바뀌었는지는 generatedAt을 뺀 내용으로 판단한다. generatedAt은
+  // 매번 바뀌므로 그것만으로 커밋하면 히스토리가 쓸모없이 늘어난다.
+  const withoutStamp = (text: string) => text.replace(/"generatedAt":\s*"[^"]*"/, '');
+  if (previousText !== null && withoutStamp(previousText) === withoutStamp(json)) {
+    console.log('가용성에 실질적인 변화가 없어 파일을 갱신하지 않습니다.');
+  } else {
+    writeFileSync(OUT_PATH, json);
+    commitIfChanged(OUT_PATH);
+  }
+
+  await notify(notificationsFor(previous, snapshot, now));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

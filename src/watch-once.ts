@@ -19,8 +19,10 @@
 import { fetchOpenDates, fetchSlotsForDates, type Product } from './adapters/audeum/http-flow.js';
 import { ACTIVE_PRODUCTS } from './adapters/audeum/contract.js';
 import { prepareBooking } from './booking/prepare.js';
-import { parseWatchRequests, type WatchRequest } from './config/watch-requests.js';
+import { isExpired, parseWatchRequests, type WatchRequest } from './config/watch-requests.js';
 import { createGitHubIssueNotifier } from './notify/github-issue.js';
+import { createFamilyNotifier, familyConfigFromEnv, fanOut } from './notify/family.js';
+import { closeWithComment, listOpenIssues } from './github/issues.js';
 import type { Notifier } from './notify/types.js';
 import { slotKey } from './core/types.js';
 import { decideBookingMode } from './booking-gate.js';
@@ -47,13 +49,7 @@ if (!owner || !repo) {
   process.exit(1);
 }
 
-const gh = async (path: string) => {
-  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}${path}`, {
-    headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json' },
-  });
-  if (!res.ok) throw new Error(`GitHub API 실패 (${res.status}): ${path}`);
-  return res.json() as Promise<unknown>;
-};
+const repoRef = { owner, repo, token };
 
 /** 라벨 하나를 붙인다. 실패해도 감시를 멈추지 않는다 — 표시일 뿐이다. */
 async function addLabel(issueNumber: number, label: string): Promise<boolean> {
@@ -149,12 +145,28 @@ async function checkProduct(
     // 경고하고, 다른 상품 감시는 그대로 이어간다 — process.exitCode는 여기서
     // 세팅해 문제를 밖으로 드러내되, 흐름을 끊지는 않는다.
     say(`\n🚨 **${label} 사이트 구조가 바뀐 것으로 보입니다:** ${result.reason}`);
+    // 받은 조각을 남긴다. 9/19에는 이게 없어서 원인을 로그 시각으로 거꾸로 추적해야 했다.
+    if (result.raw !== undefined) say(`받은 조각(앞부분): \`${String(result.raw).slice(0, 300).replace(/\s+/g, ' ')}\``);
+    // 같은 문제는 이슈 하나로 묶인다 (key). 복구되면 아래에서 자동으로 닫힌다.
     await notifier.send({
       kind: 'SYSTEM_WARNING',
+      key: `contract:${product}`,
       reason: `${label} 빈자리를 확인할 수 없습니다. ${result.reason}\n\n확인이 멈춘 동안 빈자리를 놓치고 있을 수 있습니다.`,
     });
     process.exitCode = 1;
     return 0;
+  }
+
+  // 여기까지 왔으면 이 상품은 정상으로 읽혔다. 열려 있던 경고가 있으면 닫는다.
+  // 이 정리가 실패했다고 빈자리 확인을 멈추지는 않는다.
+  try {
+    await notifier.send({
+      kind: 'SYSTEM_RECOVERED',
+      key: `contract:${product}`,
+      note: `${label} 회차를 다시 정상적으로 읽고 있습니다 (${new Date().toISOString()}).`,
+    });
+  } catch (error) {
+    say(`- ⚠️ 경고 이슈 정리 실패: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   for (const [date, one] of perDate) {
@@ -223,10 +235,25 @@ async function main(): Promise<void> {
 
   // 라벨로 걸러 받지 않는다. 폰에서 낸 신청서에는 라벨이 붙지 않기 때문이다
   // (GitHub 모바일 웹이 `?labels=`를 조용히 버린다). 전부 받아 모양으로 판별한다.
-  const issues = await gh('/issues?state=open&per_page=100');
-  const { requests, problems } = parseWatchRequests(issues);
+  // 한 페이지(100건)만 읽으면 다른 이슈가 많을 때 신청이 밀려난다 — 실제로 그랬다.
+  const issues = await listOpenIssues(repoRef);
+  const parsed = parseWatchRequests(issues);
+  for (const problem of parsed.problems) say(`- ⚠️ ${problem}`);
 
-  for (const problem of problems) say(`- ⚠️ ${problem}`);
+  // 회차가 지났거나 곧 시작하는 신청은 닫는다. 남겨 두면 끝난 날의 회차를 계속
+  // 물어 오판하고(9/19), 감시 루프도 끝없이 이어간다.
+  const now = new Date();
+  for (const request of parsed.requests.filter((r) => isExpired(r, now))) {
+    try {
+      await closeWithComment(repoRef, request.issueNumber,
+        `⏰ ${request.date} ${request.time} 회차가 곧 시작하거나 이미 지나서 감시를 마칩니다.\n\n`
+        + '다른 날짜를 보시려면 새로 신청해 주세요.');
+      say(`- #${request.issueNumber}: ${request.date} ${request.time} — 지난 회차라 감시를 마치고 닫았습니다`);
+    } catch (error) {
+      say(`- ⚠️ #${request.issueNumber}: 지난 신청을 닫지 못했습니다 (${error instanceof Error ? error.message : String(error)})`);
+    }
+  }
+  const requests = parsed.requests.filter((r) => !isExpired(r, now));
 
   if (requests.length === 0) {
     say('감시 중인 항목이 없습니다.');
@@ -241,7 +268,12 @@ async function main(): Promise<void> {
       + ' (폰에서 신청하면 GitHub이 라벨을 빠뜨립니다 — 감시에는 영향 없습니다)');
   }
 
-  const notifier = createGitHubIssueNotifier({ owner: owner!, repo: repo!, token: token! });
+  // 이슈 알림이 중복 판정을 하고, 실제로 알렸을 때만 가족 메일·푸시로 넘긴다.
+  const notifier = fanOut(
+    createGitHubIssueNotifier({ owner: owner!, repo: repo!, token: token! }),
+    [createFamilyNotifier(familyConfigFromEnv(process.env, say))],
+    say,
+  );
   let matchedTotal = 0;
 
   for (const request of requests.filter((r) => !ACTIVE_PRODUCTS.includes(r.product))) {

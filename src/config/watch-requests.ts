@@ -64,6 +64,23 @@ export interface WatchRequest {
   readonly missingLabel: boolean;
 }
 
+/**
+ * 회차 시작까지 이만큼도 안 남았으면 감시를 끝낸다.
+ *
+ * 그 전에 잡은 취소표로는 도착하기 어렵고(도슨트 투어는 정시에 출발한다), 무엇보다
+ * 지난 회차를 계속 보면 사고가 난다. 2026-09-19 저녁, 이미 끝난 그날 13:30 신청이
+ * 열려 있어서 감시가 그날 회차 조각을 계속 물었다. 당일 회차가 다 끝나면 사이트는
+ * 조각을 날짜·시각 필드 없이 보내는데, 그걸 "사이트 구조가 바뀌었다"로 읽어 경고가
+ * 5분마다 쌓였다. 지난 신청이 감시 루프를 끝없이 이어가게 만들기도 했다.
+ */
+export const EXPIRE_BEFORE_START_MS = 60 * 60_000;
+
+/** 이 신청의 회차가 이미 지났거나 곧 시작해서 더 볼 필요가 없는가. */
+export function isExpired(request: Pick<WatchRequest, 'date' | 'time'>, now: Date): boolean {
+  const start = Date.parse(`${request.date}T${request.time}:00+09:00`);
+  return start - EXPIRE_BEFORE_START_MS <= now.getTime();
+}
+
 /** 이슈 본문에서 `### 제목` 다음에 오는 값을 꺼낸다. */
 function fieldValue(body: string, heading: string): string | null {
   const pattern = new RegExp(`###\\s*${heading}\\s*\\n+([^\\n#]+)`, 'i');
