@@ -74,6 +74,10 @@ on:
     # 화~토 2시간마다. 정각을 피해 7분에 둔다 — GitHub 문서가 매시 정각을
     # 고부하 시간대로 지목한다.
     - cron: '7 0,2,4,6,8,10,12,14,16,18,20,22 * * 2-6'
+    # 예약 오픈 시간대(화요일 13:00~14:45 KST)에 15분마다 한 번 더 깨운다.
+    # 예약 실행은 자주 밀리거나 빠지므로 기회를 여러 번 둔다. 오픈 시간대가
+    # 아니면(격주의 빈 주) plan-run이 스냅샷 한 번만 하고 끝낸다.
+    - cron: '*/15 4-5 * * 2'
   workflow_dispatch:
     inputs:
       loop_minutes:
@@ -100,9 +104,9 @@ jobs:
     # 루프가 105분이므로 여유를 두고 자른다. 무언가 매달려도 여기서 끝난다.
     timeout-minutes: 115
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -111,30 +115,30 @@ jobs:
       # 실행에 필요한 것은 tsx·cheerio·zod뿐이고, 설치가 몇 초로 끝난다.
       - run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: 당월 가용성 스냅샷 갱신
+      - name: 가용성 스냅샷 갱신
         # 감시 요청이 0건이어도 돈다 — "무엇을 감시할지 고르는" 화면 자체가
         # 이 데이터로 그려지므로, 감시 요청의 존재 여부와 무관해야 한다.
+        # 새로 열린 날짜와 오픈 예고도 여기서 알린다.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          MAILER_URL: ${{ secrets.MAILER_URL }}
+          MAILER_KEY: ${{ secrets.MAILER_KEY }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: npx tsx src/snapshot.ts
 
-      - name: 감시할 항목이 있는지 먼저 확인
-        id: check
+      - name: 이번 실행 계획
+        # 신청 수는 감시와 같은 규칙으로 센다 — 모든 페이지를 읽고, 지난 신청은 뺀다.
+        # 예전 bash grep은 100건을 넘는 이슈에서 신청을 놓쳤고 지난 신청도 셌다.
+        id: plan
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # 신청서는 본문에 "### 관람 희망 날짜"가 있는 열린 이슈다.
-          #
-          # 예전에는 watch-request 라벨로 셌는데, 폰에서 낸 신청서에는 그 라벨이
-          # 붙지 않는다 — 신청 링크가 ?labels=를 담아 보내도 GitHub 모바일 웹이
-          # 조용히 버린다. 그래서 실제 신청이 있는데도 0으로 세고 그냥 끝냈다.
-          # 하나도 없을 때만 건너뛰면 되므로, 판별은 넉넉한 쪽이 안전하다.
-          count=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/issues?state=open&per_page=100" \
-            | grep -c '관람 희망 날짜' || true)
-          echo "count=$count" >> "$GITHUB_OUTPUT"
-          echo "감시 요청 $count건"
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          LOOP_MINUTES: ${{ inputs.loop_minutes || '105' }}
+        run: npx tsx src/plan-run.ts
 
       - name: 빈자리 확인
-        if: steps.check.outputs.count != '0'
+        if: steps.plan.outputs.run == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -147,24 +151,33 @@ jobs:
           DRY_RUN: ${{ inputs.confirm_live_booking == true && 'false' || 'true' }}
           APPLICANT_NAME: ${{ secrets.APPLICANT_NAME }}
           APPLICANT_EMAIL: ${{ secrets.APPLICANT_EMAIL }}
-          # 예약 실행이면 105분, 수동 실행이면 사람이 고른 값. 모르는 값은 0으로
-          # 떨어뜨려 한 번만 확인한다 — 실수로 오래 도는 것보다 짧은 편이 낫다.
-          LOOP_MINUTES: ${{ inputs.loop_minutes || '105' }}
+          MAILER_URL: ${{ secrets.MAILER_URL }}
+          MAILER_KEY: ${{ secrets.MAILER_KEY }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          # 루프 길이는 plan-run이 정했다 (신청이 있으면 105분, 오픈 시간대면 그 끝까지).
+          LOOP_MINUTES: ${{ steps.plan.outputs.loop }}
+          WATCH: ${{ steps.plan.outputs.watch }}
+          OPENING_WINDOW: ${{ steps.plan.outputs.window }}
         run: |
           set -u
           loop=$(printf '%s' "${LOOP_MINUTES:-0}" | tr -cd '0-9')
           loop=${loop:-0}
           deadline=$(( $(date +%s) + loop * 60 ))
-          echo "감시 시작 — ${loop}분 동안 5분 간격으로 확인합니다."
+          echo "감시 시작 — ${loop}분 동안 5분 간격 (신청 확인: ${WATCH}, 오픈 시간대: ${OPENING_WINDOW})"
 
           checks=0
           failures=0
           while :; do
             checks=$(( checks + 1 ))
             echo "::group::확인 #${checks} ($(date -u '+%H:%M:%S') UTC)"
+            # 오픈 시간대에는 매번 스냅샷을 다시 떠서 새로 열린 날짜를 바로 알린다.
+            # 첫 번째는 앞 단계에서 이미 떴으므로 건너뛴다.
+            if [ "$OPENING_WINDOW" = "true" ] && [ "$checks" -gt 1 ]; then
+              npx tsx src/snapshot.ts || echo "스냅샷 갱신 실패 — 다음 확인에서 다시 시도합니다."
+            fi
             # 한 번 실패했다고 감시를 멈추지 않는다. 사이트가 잠깐 흔들리는 것과
             # 감시를 통째로 포기하는 것은 전혀 다른 무게다.
-            if ! npx tsx src/watch-once.ts; then
+            if [ "$WATCH" = "true" ] && ! npx tsx src/watch-once.ts; then
               failures=$(( failures + 1 ))
               echo "이번 확인이 실패했습니다 (누적 ${failures}회) — 계속 감시합니다."
             fi
@@ -191,17 +204,18 @@ jobs:
           fi
 
       - name: 감시 요청이 없을 때
-        if: steps.check.outputs.count == '0'
+        if: steps.plan.outputs.run != 'true'
         run: echo "감시 중인 항목이 없습니다. 이슈로 '빈자리 감시 신청'을 등록하세요." >> "$GITHUB_STEP_SUMMARY"
 
       # 예약 실행을 믿을 수 없으므로 스스로 이어간다. 자세한 이유는 머리말에 있다.
       - name: 다음 실행 이어가기
         # always()인 이유: 확인이 몇 번 실패했다고 감시가 끊기면 안 된다.
         # 실패했다는 것은 오히려 계속 지켜봐야 한다는 뜻이다.
-        if: always() && steps.check.outputs.count != '0'
+        if: always() && steps.plan.outputs.watch == 'true'
         env:
           CHAIN_TOKEN: ${{ secrets.CHAIN_TOKEN }}
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           REPO: ${{ github.repository }}
         run: |
           set -u
@@ -219,9 +233,9 @@ jobs:
 
           # 루프가 도는 사이에 사용자가 신청을 닫았을 수 있다. 그게 유일한
           # 정지 스위치이므로, 걸기 직전에 반드시 다시 확인한다.
-          still=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/$REPO/issues?state=open&per_page=100" \
-            | grep -c '관람 희망 날짜' || true)
+          # 감시와 같은 규칙으로 센다 — 지난 신청은 세지 않으므로, 모든 신청의 회차가
+          # 지나면 루프가 저절로 멈춘다 (9/19 이후 지난 신청이 루프를 붙잡았다).
+          still=$(npx tsx src/plan-run.ts --count 2>/dev/null || echo 0)
           if [ "$still" = "0" ]; then
             echo "감시 신청이 모두 닫혔습니다 — 이어가지 않습니다."
             echo "감시 신청이 모두 닫혀 감시를 멈춥니다." >> "$GITHUB_STEP_SUMMARY"

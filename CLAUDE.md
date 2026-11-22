@@ -19,7 +19,10 @@ GitHub Actions cron ──▶ src/watch-once.ts    ← 실제로 도는 경로 (
                               ├─ GitHub 이슈(감시 요청) 읽기 — product별로 나눠 처리
                               ├─ src/adapters/audeum/http-flow.ts  ← 폼 POST 1건
                               │     └─ parse-time-fragment.ts      ← 여석 판단
-                              └─ 이슈로 알림
+                              ├─ 이슈로 알림 (중복 억제의 기준 — 이슈가 새로 열릴 때만)
+                              └─ 가족 알림: src/notify/family.ts
+                                    ├─ 메일 → mailer/Code.gs (주인 Gmail의 Apps Script)
+                                    └─ 푸시 → ntfy.sh 채널 (NTFY_TOPIC)
 
                         같은 실행마다 (감시 요청 유무와 무관하게) ↓
                    src/snapshot.ts → src/adapters/audeum/build-snapshot.ts
@@ -90,10 +93,17 @@ pnpm test
 - [x] M1 정찰 — 14차까지 완료. 조회·요청 계약 확정 (`docs/site-contract.md`)
 - [x] M2 코어 로직
 - [x] M3 폴링 루프 — 실제로 돌고 있고, 실제 취소표를 한 번 잡아냈다
-- [x] M4 알림 — GitHub 이슈로 보낸다 (앱 푸시 + 이메일이 딸려 온다)
+- [x] M4 알림 — GitHub 이슈로 보낸다 (앱 푸시 + 이메일이 딸려 온다).
+      경고는 라벨(`system:<key>`)로 묶어 6시간에 한 번만, 복구되면 스스로 닫는다
+      (2026-09-19 경고 99건 폭주의 재발 방지). 예약 오픈 예고·열림 알림도 보낸다.
+      **가족 알림**은 같은 알림을 메일(Apps Script, `mailer/`)과 ntfy로 퍼뜨린다 —
+      GitHub 쪽이 새로 보냈을 때만 따라간다. 시크릿 `MAILER_URL`·`MAILER_KEY`·`NTFY_TOPIC`이
+      없으면 조용히 건너뛴다
 - [x] M5 UI — `docs-site/index.html` 모바일 달력. 전시·렉처를 완전히 독립된
       카드로 그리고, `docs-site/data/availability.json`(실측 당월 매진/여석)을
-      읽어 실제 상태를 보여준다. 서버 없이 이슈 주소로 넘긴다
+      읽어 실제 상태를 보여준다. 서버 없이 이슈 주소로 넘긴다.
+      **가족 화면 / 관리자 화면(`#admin`)** 으로 나뉜다 — 가족은 달력 보기와 알림 등록만,
+      관리자는 감시 신청·초대 링크 만들기까지 (`docs-site/README.md`)
 - [~] M6 자동예약 — **휴대폰 인증 + Cloudflare Turnstile이 막고 있다.**
       뚫지 않는다. 관문 앞까지 자동화하는 것이 최대치다. `docs/auto-booking.md` 참고
 - [~] M7 배포 — GitHub Actions (감시)는 돈다. GitHub Pages (신청 페이지)는

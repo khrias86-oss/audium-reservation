@@ -69,7 +69,7 @@
   .opennote b { color: var(--fg); }
   .freshness { font-size: 11px; color: var(--muted); margin: -2px 0 12px; }
 
-  .month { text-align: center; margin-bottom: 8px; }
+  .month { text-align: center; margin: 10px 0 8px; }
   .month strong { font-size: 15px; }
 
   .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
@@ -143,7 +143,9 @@
   .btn {
     min-height: var(--tap); padding: 0 16px; border: 1px solid var(--line); border-radius: 10px;
     background: transparent; color: var(--fg); font-size: 15px; cursor: pointer;
+    white-space: nowrap; flex: none;
   }
+  .setup .row input { min-width: 0; flex: 1; }
   .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
   .btn.grow { flex: 1; }
   .ok { color: var(--pick); font-size: 13px; }
@@ -159,6 +161,35 @@
   .dot.warn { background: var(--warn); }
   .dot.exhibition { background: var(--tag-exhibition); }
   .dot.lecture { background: var(--tag-lecture); }
+
+  /* ── 확인 불가 / 여러 달 ── */
+  .day.unknown { color: var(--muted); border: 1px dashed var(--line); cursor: default; }
+  .legend i.unknown { border: 1px dashed var(--muted); }
+  .monthblock + .monthblock { margin-top: 16px; }
+  .snaperr { font-size: 13px; color: var(--warn); background: var(--warn-soft); border-radius: 10px;
+             padding: 8px 12px; margin: 8px 0 10px; }
+
+  /* ── 가족 화면 / 관리자 화면 ── */
+  body.family .admin-only, body.admin .family-only { display: none !important; }
+  body.family { padding-bottom: calc(32px + env(safe-area-inset-bottom)); }
+  .lead { font-size: 14px; margin: 0 0 12px; }
+  .status-line { font-size: 13px; margin: 4px 0 0; min-height: 1.2em; }
+  ol.guide { padding-left: 20px; margin: 0; font-size: 14px; line-height: 1.7; }
+  ol.guide li { margin-bottom: 10px; }
+  ol.guide li:last-child { margin-bottom: 0; }
+  .storebtns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+  .storebtns a { font-size: 13px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px;
+                 color: var(--fg); text-decoration: none; }
+  code.kv { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; background: var(--bg);
+            border: 1px solid var(--line); border-radius: 8px; padding: 2px 8px; word-break: break-all; }
+  .codebox { display: grid; gap: 8px; margin: 10px 0; }
+  .codebox .row { display: flex; align-items: center; gap: 8px; }
+  .codebox .row .k { font-size: 12px; color: var(--muted); width: 84px; flex: none; }
+  .codebox .row code.kv { flex: 1; }
+  ul.tips { padding-left: 18px; margin: 0 0 12px; font-size: 14px; line-height: 1.7; }
+  .modelink { text-align: center; margin-top: 10px; }
+  a.booklink { display: block; text-align: center; min-height: var(--tap); line-height: var(--tap); margin-top: 12px;
+               border: 1px solid var(--line); border-radius: 10px; color: var(--fg); text-decoration: none; font-size: 15px; }
 
   .bar {
     position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
@@ -178,15 +209,66 @@
 </head>
 <body>
 
-<h1>오디움 빈자리 감시</h1>
-<p class="sub">달력에서 날짜를 눌러 회차를 고르세요.</p>
+<h1 id="title">오디움 빈자리 감시</h1>
+<p class="sub" id="subtitle">달력에서 날짜를 눌러 회차를 고르세요.</p>
 
 <div class="notice" id="notice" hidden></div>
+
+<!-- ── 가족 화면: 알림 받기 ── -->
+<section id="join" class="family-only">
+  <h2>📮 메일로 알림 받기</h2>
+  <p class="lead">빈자리가 나거나 <b>새 예약이 열리면</b> 메일로 바로 알려 드립니다. 메일 주소만 넣으면 됩니다.</p>
+  <div class="setup" id="joinform">
+    <input id="joinemail" type="email" placeholder="메일 주소" autocomplete="email" inputmode="email"
+           autocapitalize="off" autocorrect="off" spellcheck="false" style="font-family:inherit">
+    <div class="row">
+      <button class="btn primary grow" id="joinbtn">등록</button>
+      <button class="btn" id="jointest">테스트 메일</button>
+    </div>
+    <p class="status-line note" id="joinstate"></p>
+    <details>
+      <summary>메일 알림 끄기</summary>
+      <p class="note">위 칸에 등록했던 주소를 넣고 누르세요.</p>
+      <button class="btn" id="joinoff">메일 알림 끄기</button>
+    </details>
+  </div>
+  <p class="bad" id="joinmissing" hidden>
+    메일 등록은 <b>초대 링크</b>로 들어와야 할 수 있습니다. 링크를 보내준 사람에게 다시 받아 주세요.
+  </p>
+</section>
+
+<section id="push" class="family-only">
+  <h2>📱 휴대폰 푸시 (선택)</h2>
+  <p class="lead">메일보다 빠르게 받고 싶다면 무료 앱 <b>ntfy</b>를 쓰세요. 가입은 필요 없습니다.</p>
+  <div id="pushguide">
+    <ol class="guide">
+      <li><b>앱 설치</b>
+        <div class="storebtns">
+          <a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noopener">아이폰 App Store</a>
+          <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener">안드로이드 Play 스토어</a>
+        </div>
+      </li>
+      <li><b>채널 구독</b> — 앱에서 <b>＋</b>를 누르고 아래 이름을 붙여넣은 뒤 <b>Subscribe</b>
+        <div class="codebox"><div class="row">
+          <code class="kv" id="pushtopic">-</code>
+          <button class="btn" id="pushcopy">복사</button>
+        </div></div>
+        <p class="note" style="margin:0">처음 열 때 <b>알림 허용</b>을 꼭 눌러 주세요.</p>
+      </li>
+      <li><b>확인</b> — 아래를 누르면 몇 초 안에 휴대폰에 알림이 옵니다.
+        <div style="margin-top:6px"><button class="btn" id="pushtest">테스트 푸시 보내기</button></div>
+        <p class="status-line note" id="pushstate"></p>
+      </li>
+    </ol>
+  </div>
+  <p class="note" id="pushmissing" hidden style="margin:0">초대 링크로 들어오면 구독할 채널 이름이 여기에 나옵니다.</p>
+</section>
 
 <section id="product-exhibition" class="product" data-product="exhibition"></section>
 <section id="product-lecture" class="product" data-product="lecture"></section>
 
-<section>
+<!-- ── 관리자 화면 ── -->
+<section class="admin-only">
   <h2>감시할 목록 <span id="count" style="font-weight:400"></span></h2>
   <ul class="picked" id="picked"></ul>
   <p class="empty" id="none">아직 없습니다. 위 달력에서 날짜와 회차를 고르면 여기에 쌓입니다.</p>
@@ -194,7 +276,7 @@
      ↑ 를 눌러 순서를 올릴 수 있습니다.</p>
 </section>
 
-<section id="status">
+<section id="status" class="admin-only">
   <h2>지금 감시 중 <span id="livecount" style="font-weight:400"></span></h2>
   <p class="note" id="lastrun" style="margin:0 0 12px"></p>
   <ul class="live" id="live"></ul>
@@ -202,7 +284,14 @@
 </section>
 
 <section id="me">
-  <h2>내 예약 정보</h2>
+  <h2>예약 준비 — 알림이 오면 1분 안에</h2>
+  <ul class="tips">
+    <li>오디움은 <b>1인 1매</b>이고 <b>본인 휴대폰 인증</b>이 필요합니다. 대신 잡아 줄 수 없으니 알림이 오면 직접 들어가세요.</li>
+    <li>취소표는 <b>몇 분 안에</b> 다시 나갑니다. 알림을 보면 바로 아래 <b>오디움 예약 화면</b>을 여세요.</li>
+    <li>한가할 때 한 번 <b>끝까지 눌러 보세요</b> (결제 직전까지). 실제 때 헤매지 않습니다.</li>
+    <li>관람 당일에는 <b>신분증</b>을 챙기세요.</li>
+  </ul>
+  <a class="booklink" href="https://audeum.org/booking" target="_blank" rel="noopener" style="margin:0 0 14px">오디움 예약 화면 열기 →</a>
   <p class="note" style="margin:0 0 12px">
     자리가 났을 때 <b>타이핑하지 않고 붙여넣기만</b> 하려고 미리 적어 두는 칸입니다.
     <b>이 브라우저에만 저장되고 어디로도 전송되지 않습니다.</b>
@@ -221,7 +310,39 @@
   </div>
 </section>
 
-<section id="auth">
+<section id="invite" class="admin-only">
+  <h2>가족 초대 링크 만들기</h2>
+  <p class="note" style="margin:0 0 10px">
+    처음 한 번은 <a id="guidelink" target="_blank" rel="noopener" style="color:var(--pick)">설정 방법</a>을 따라
+    Google Apps Script 발송기를 올려야 합니다. 메일은 <b>내 Gmail에서</b> 나가고, 가족 주소는 내 Google 계정에만 저장됩니다.
+  </p>
+  <div class="setup">
+    <button class="btn" id="gencodes">무작위 코드 만들기</button>
+    <div class="codebox" id="codes" hidden>
+      <div class="row"><span class="k">초대 코드</span><code class="kv" id="c-invite"></code><button class="btn" data-copytext="c-invite">복사</button></div>
+      <div class="row"><span class="k">알림 열쇠</span><code class="kv" id="c-key"></code><button class="btn" data-copytext="c-key">복사</button></div>
+      <div class="row"><span class="k">푸시 채널</span><code class="kv" id="c-topic"></code><button class="btn" data-copytext="c-topic">복사</button></div>
+      <p class="note" style="margin:0"><b>알림 열쇠</b>는 GitHub 시크릿 <code>MAILER_KEY</code>와 Apps Script <code>NOTIFY_KEY</code>에만 넣으세요.
+        가족에게 보내면 안 됩니다. 코드는 이 브라우저에만 저장됩니다.</p>
+    </div>
+    <input id="mailerurl" type="url" placeholder="웹 앱 URL (https://script.google.com/macros/s/…/exec)"
+           autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <div class="row">
+      <button class="btn grow" id="checkmailer">발송기 연결 확인</button>
+    </div>
+    <p class="status-line note" id="invitestate"></p>
+    <div id="invitebox" hidden>
+      <div class="codebox"><div class="row"><code class="kv" id="invitelink"></code></div></div>
+      <div class="row">
+        <button class="btn primary grow" id="shareinvite">카톡으로 보내기</button>
+        <button class="btn" data-copytext="invitelink">복사</button>
+      </div>
+      <p class="modelink"><a class="plain" id="familypreview" target="_blank" rel="noopener">가족 화면 미리보기 →</a></p>
+    </div>
+  </div>
+</section>
+
+<section id="auth" class="admin-only">
   <h2>자동 등록</h2>
   <div class="setup">
     <p class="note" id="authstate" style="margin:0"></p>
@@ -250,7 +371,7 @@
   </div>
 </section>
 
-<section id="submit" hidden>
+<section id="submit" class="admin-only" hidden>
   <h2>신청서 <span id="progress" style="font-weight:400"></span></h2>
   <p class="note" style="margin:0 0 12px">
     아래를 <b>위에서부터 하나씩</b> 누르세요. GitHub이 열리고 내용은 이미 채워져 있습니다.
@@ -259,11 +380,12 @@
   <ol class="steps" id="steps"></ol>
 </section>
 
-<p style="text-align:center;margin-top:18px">
+<p class="admin-only" style="text-align:center;margin-top:18px">
   <a class="plain" id="mylist" href="#">내가 감시 중인 목록 보기 →</a>
 </p>
+<p class="admin-only modelink"><a class="plain" href="#family" id="leaveadmin">관리자 화면 닫기 (가족 화면으로)</a></p>
 
-<div class="bar"><div class="inner">
+<div class="bar admin-only"><div class="inner">
   <button class="go" id="go" disabled>감시 신청하기</button>
   <p class="hint" id="hint">달력에서 날짜와 회차를 고르세요</p>
 </div></div>
@@ -289,6 +411,59 @@ const today = (() => {
 /** `${date}T00:00:00+09:00`을 `.getDay()`로 읽으면 실행 환경(UTC 등)의
  *  로컬 타임존으로 계산되어 하루 밀릴 수 있다 — 반드시 UTC로 파싱해 UTC로 읽는다. */
 const dowOf = (dateStr) => new Date(`${dateStr}T00:00:00Z`).getUTCDay();
+
+/* ────────────────────────── 화면 모드 ──────────────────────────
+ *
+ * 가족(초대받은 사람)과 관리자(저장소 주인)가 같은 주소를 쓴다.
+ * 가족은 GitHub을 모르고 쓸 필요도 없다 — 달력 보기와 알림 받기만 있으면 된다.
+ * 관리자는 감시 신청·토큰·초대 링크 만들기가 필요하다.
+ *
+ *   #admin           → 관리자 화면. 이 브라우저에 기억해 둔다.
+ *   #family, #join=… → 가족 화면 (관리자가 미리보기할 때도 이것).
+ *   그 밖             → 기억된 관리자거나 토큰이 있으면 관리자, 아니면 가족.
+ *
+ * 숨기는 것은 보안 장치가 아니다 (페이지에는 비밀이 없다). 화면을 단순하게 할 뿐이다.
+ */
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* 저장이 막힌 브라우저 — 이번 방문만 유지 */ } },
+  del(k) { try { localStorage.removeItem(k); } catch { /* 이미 없으면 그만 */ } },
+};
+
+/** 초대 링크 조각: `#join=<초대코드>&mail=<발송기 URL>`. */
+function readInviteFromHash() {
+  if (!location.hash.startsWith('#join=')) return null;
+  const params = new URLSearchParams(location.hash.slice(1));
+  const code = (params.get('join') || '').trim();
+  if (!/^[a-z0-9]{6,40}$/.test(code)) return null;
+  const mail = (params.get('mail') || '').trim();
+  return { code, mail: isMailerUrl(mail) ? mail : '' };
+}
+function isMailerUrl(u) {
+  return /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(u || '');
+}
+
+const INVITE_KEY = 'audeum.invite';
+let invite = readInviteFromHash();
+// 홈 화면에 추가한 앱이나 주소를 잃어버린 경우를 위해 기억해 둔다.
+if (invite) store.set(INVITE_KEY, JSON.stringify(invite));
+else { try { invite = JSON.parse(store.get(INVITE_KEY) || 'null'); } catch { invite = null; } }
+
+function decideMode() {
+  if (location.hash === '#admin') { store.set('audeum.admin', '1'); return 'admin'; }
+  if (location.hash === '#family' || location.hash.startsWith('#join=')) return 'family';
+  return store.get('audeum.admin') === '1' || store.get('audeum.token') ? 'admin' : 'family';
+}
+let mode = decideMode();
+const isAdmin = () => mode === 'admin';
+function applyMode() {
+  document.body.classList.toggle('admin', isAdmin());
+  document.body.classList.toggle('family', !isAdmin());
+  $('title').textContent = isAdmin() ? '오디움 빈자리 감시' : '오디움 빈자리 알림';
+  $('subtitle').textContent = isAdmin()
+    ? '달력에서 날짜를 눌러 회차를 고르세요.'
+    : '빈자리가 나면 알려 드립니다. 아래에서 알림을 켜 두세요.';
+}
 
 let availability = null;   // FullSnapshot | null (아직 못 받았거나 실패)
 let selected = { exhibition: new Set(), lecture: new Set() };  // "date|time"
@@ -378,16 +553,29 @@ function toggleQuickTime(product, time) {
   refresh();
 }
 
+const fmtDate = (date) => `${Number(date.slice(5, 7))}월 ${Number(date.slice(8, 10))}일(${DOW[dowOf(date)]})`;
+const fmtAt = (at) => `${fmtDate(at.slice(0, 10))} ${at.slice(11, 16)}`;
+
+/**
+ * 다음 예약 오픈 안내.
+ *
+ * 사이트가 밝힌 시각(아직 안 열린 날의 opensAt)이 있으면 그것이 정답이다.
+ * 없으면 감시 쪽이 지난 오픈 패턴(격주)으로 추정한 nextOpenGuess를 쓰되,
+ * **추정**이라고 분명히 적는다 — 틀릴 수 있는 값을 확정처럼 보이게 하지 않는다.
+ */
 function nextOpenText(product) {
   const snap = snapshotOf(product);
   if (!snap) return null;
-  const upcoming = snap.days.filter((d) => d.state === 'NOT_OPEN' && d.opensAt);
-  if (!upcoming.length) return null;
-  upcoming.sort((a, b) => (a.opensAt < b.opensAt ? -1 : 1));
-  const [datePart, timePart] = upcoming[0].opensAt.split('T');
-  const [, m, d] = datePart.split('-');
-  const hm = (timePart || '').slice(0, 5);
-  return `다음 예약 오픈: <b>${Number(m)}월 ${Number(d)}일(${DOW[dowOf(datePart)]}) ${hm}</b>`;
+  const nowKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 19);
+  const known = snap.days
+    .filter((d) => d.state === 'NOT_OPEN' && d.opensAt && d.opensAt > nowKst)
+    .map((d) => d.opensAt).sort()[0];
+  if (known) return `다음 예약 오픈: <b>${fmtAt(known)}</b>`;
+  if (snap.nextOpenGuess) {
+    return `다음 예약 오픈 <b>예상</b>: <b>${fmtAt(snap.nextOpenGuess)}</b>`
+      + ' <span style="font-size:12px">(지난 오픈 간격으로 추정 — 열리면 알림이 갑니다)</span>';
+  }
+  return null;
 }
 
 function freshnessText() {
@@ -396,6 +584,32 @@ function freshnessText() {
   const ago = minutes < 1 ? '방금' : minutes < 60 ? `${minutes}분 전`
     : minutes < 1440 ? `${Math.round(minutes / 60)}시간 전` : `${Math.round(minutes / 1440)}일 전`;
   return `달력 정보 갱신: ${ago}`;
+}
+
+/** 스냅샷의 days를 달별로 나눈다. 예전 스키마(months 없음)도 같은 방식으로 그려진다. */
+function monthsOf(snap) {
+  const groups = new Map();
+  for (const day of snap.days) {
+    const m = day.date.slice(0, 7);
+    if (!groups.has(m)) groups.set(m, []);
+    groups.get(m).push(day);
+  }
+  return [...groups.entries()];
+}
+
+function dayCell(product, day) {
+  const n = Number(day.date.slice(-2));
+  const stateCls = day.state.toLowerCase().replace('_', '');
+  const tappable = day.state === 'SOLD_OUT' || day.state === 'AVAILABLE';
+  const hasPick = isAdmin() && tappable
+    && (day.slots ?? []).some((s) => selected[product].has(`${day.date}|${s.time}`));
+  const expanded = openDay[product] === day.date;
+  const title = day.state === 'NOT_OPEN' && day.opensAt ? ` title="오픈 예정: ${day.opensAt.replace('T', ' ')}"`
+    : day.state === 'UNKNOWN' ? ' title="지금은 확인할 수 없습니다"' : '';
+  const cls = ['day', stateCls, expanded ? 'expanded' : ''].join(' ').trim();
+  return tappable
+    ? `<button class="${cls}" data-day="${day.date}"><span class="n">${n}</span>${hasPick ? '<span class="pickdot"></span>' : ''}</button>`
+    : `<div class="${cls}"${title}><span class="n">${n}</span></div>`;
 }
 
 function renderProduct(product) {
@@ -418,29 +632,23 @@ function renderProduct(product) {
     return;
   }
 
-  const [y, m] = snap.month.split('-').map(Number);
   const opennote = nextOpenText(product);
+  const hasUnknown = snap.days.some((d) => d.state === 'UNKNOWN');
 
-  const leadBlanks = snap.days.length ? snap.days[0].dow : 0;
-  let gridHtml = '';
-  for (let i = 0; i < leadBlanks; i++) gridHtml += '<div></div>';
-  for (const day of snap.days) {
-    const n = Number(day.date.slice(-2));
-    const stateCls = day.state.toLowerCase().replace('_', '');
-    const tappable = day.state === 'SOLD_OUT' || day.state === 'AVAILABLE';
-    const hasPick = tappable && (day.slots ?? []).some((s) => selected[product].has(`${day.date}|${s.time}`));
-    const expanded = openDay[product] === day.date;
-    const title = day.state === 'NOT_OPEN' && day.opensAt ? ` title="오픈 예정: ${day.opensAt.replace('T', ' ')}"` : '';
-    const cls = ['day', stateCls, expanded ? 'expanded' : ''].join(' ').trim();
-    gridHtml += tappable
-      ? `<button class="${cls}" data-day="${day.date}"><span class="n">${n}</span>${hasPick ? '<span class="pickdot"></span>' : ''}</button>`
-      : `<div class="${cls}"${title}><span class="n">${n}</span></div>`;
-  }
+  const monthsHtml = monthsOf(snap).map(([month, days]) => {
+    const [y, m] = month.split('-').map(Number);
+    const lead = days.length ? days[0].dow : 0;
+    return `<div class="monthblock">
+      <div class="month"><strong>${y}년 ${m}월</strong></div>
+      <div class="grid">${DOW.map((d) => `<div class="dow">${d}</div>`).join('')}</div>
+      <div class="grid">${'<div></div>'.repeat(lead)}${days.map((d) => dayCell(product, d)).join('')}</div>
+    </div>`;
+  }).join('');
 
-  const quickTimes = timesInMonth(product);
+  const quickTimes = isAdmin() ? timesInMonth(product) : [];
   const quickHtml = quickTimes.length
     ? `<div class="quick">
-        <p class="label">빠른 선택 — 이 시각을 이번 달 모든 날짜에 한 번에</p>
+        <p class="label">빠른 선택 — 이 시각을 달력의 모든 날짜에 한 번에</p>
         <div class="chips">${quickTimes.map((t) => {
           const keys = keysForTime(product, t);
           const on = keys.length > 0 && keys.every((k) => selected[product].has(k));
@@ -451,13 +659,17 @@ function renderProduct(product) {
 
   const openDate = openDay[product];
   const openSnap = openDate ? dayOf(product, openDate) : null;
+  // 가족 화면에서는 회차를 "고르지" 않는다 — 상태만 보여주고 예약 화면으로 보낸다.
   const panelHtml = openSnap
     ? `<div class="daypanel">
-        <p class="daypanel-head"><b>${Number(openSnap.date.slice(5,7))}월 ${Number(openSnap.date.slice(-2))}일(${DOW[openSnap.dow]})</b> 회차</p>
+        <p class="daypanel-head"><b>${fmtDate(openSnap.date)}</b> 회차</p>
         <div class="chips">${(openSnap.slots ?? []).map((s) => {
-          const on = selected[product].has(`${openSnap.date}|${s.time}`);
-          return `<button class="chip ${on ? 'on' : ''}" data-daytime="${s.time}">${s.time}<small>${s.available ? '여석 있음' : '매진'}</small></button>`;
+          const on = isAdmin() && selected[product].has(`${openSnap.date}|${s.time}`);
+          return isAdmin()
+            ? `<button class="chip ${on ? 'on' : ''}" data-daytime="${s.time}">${s.time}<small>${s.available ? '여석 있음' : '매진'}</small></button>`
+            : `<div class="chip" style="cursor:default">${s.time}<small>${s.available ? '여석 있음' : '매진'}</small></div>`;
         }).join('') || '<p class="empty">이 날짜는 회차 정보가 없습니다.</p>'}</div>
+        ${isAdmin() ? '' : '<a class="booklink" href="https://audeum.org/booking" target="_blank" rel="noopener">오디움 예약 화면 열기 →</a>'}
       </div>`
     : '';
 
@@ -465,14 +677,14 @@ function renderProduct(product) {
     <div class="product-head">
       <span class="tag ${product}"><span class="dot"></span>${PRODUCT_LABEL[product]}</span>
     </div>
+    ${snap.error ? `<p class="snaperr">⚠️ 지금은 오디움 사이트에서 날짜 정보를 받지 못하고 있습니다. 점선 날짜는 <b>확인 불가</b>입니다 — 매진이라는 뜻이 아닙니다.</p>` : ''}
     ${opennote ? `<p class="opennote">${opennote}</p>` : ''}
-    <div class="month"><strong>${y}년 ${m}월</strong></div>
-    <div class="grid">${DOW.map((d) => `<div class="dow">${d}</div>`).join('')}</div>
-    <div class="grid">${gridHtml}</div>
+    ${monthsHtml}
     <p class="legend">
-      <span><i class="soldout"></i>매진(취소표 감시 가능)</span>
+      <span><i class="soldout"></i>${isAdmin() ? '매진(취소표 감시 가능)' : '매진'}</span>
       <span><i class="available"></i>지금 여석 있음</span>
-      <span><i class="pick"></i>내가 감시 중</span>
+      ${hasUnknown ? '<span><i class="unknown"></i>확인 불가</span>' : ''}
+      ${isAdmin() ? '<span><i class="pick"></i>내가 감시 중</span>' : ''}
     </p>
     ${panelHtml}
     ${quickHtml}
@@ -906,6 +1118,185 @@ for (const b of document.querySelectorAll('[data-copy]')) {
     }
   };
 }
+
+/* ────────────────────────── 가족 알림 (메일 · 푸시) ──────────────────────────
+ *
+ * 메일: 저장소 주인이 올린 Google Apps Script 웹 앱(mailer/Code.gs)에 등록한다.
+ *   - 메일은 주인의 Gmail에서 나가고, 주소는 주인의 Google 계정 안에만 저장된다.
+ *     공개 저장소에는 아무것도 남지 않는다.
+ *   - 본문을 text/plain으로 보낸다. application/json이면 브라우저가 사전 요청(OPTIONS)을
+ *     보내는데 Apps Script는 그걸 처리하지 못한다.
+ * 푸시: ntfy.sh의 채널 `audeum-<초대코드>`. 감시 쪽 GitHub 시크릿 NTFY_TOPIC과 같아야 한다.
+ */
+const pushTopic = () => (invite?.code ? `audeum-${invite.code}` : '');
+
+async function mailer(action, extra = {}) {
+  const res = await fetch(invite.mail, {
+    method: 'POST',
+    headers: { 'content-type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action, invite: invite.code, ...extra }),
+  });
+  return res.json();
+}
+
+function setLine(id, text, cls) {
+  $(id).textContent = text;
+  $(id).className = `status-line ${cls || 'note'}`;
+}
+
+function setupJoin() {
+  const ready = Boolean(invite?.code && invite?.mail);
+  $('joinform').hidden = !ready;
+  $('joinmissing').hidden = ready;
+  $('joinemail').value = store.get('audeum.joinemail') || '';
+
+  const run = async (action, busy, done) => {
+    const email = $('joinemail').value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setLine('joinstate', '메일 주소를 확인해 주세요.', 'bad'); return; }
+    setLine('joinstate', busy);
+    try {
+      const r = await mailer(action, { email });
+      if (!r.ok) { setLine('joinstate', r.error || '실패했습니다.', 'bad'); return; }
+      store.set('audeum.joinemail', email);
+      setLine('joinstate', done(r), 'ok');
+    } catch {
+      setLine('joinstate', looksLikePreview()
+        ? '이 미리보기 화면에서는 등록이 막힙니다. 초대 링크(…github.io)로 열어 주세요.'
+        : '연결하지 못했습니다. 잠시 후 다시 눌러 주세요.', 'bad');
+    }
+  };
+  $('joinbtn').onclick = () => run('subscribe', '등록하는 중…', (r) => r.already
+    ? '✅ 이미 등록된 주소입니다. 확인 메일을 다시 보냈습니다.'
+    : '✅ 등록했습니다. 확인 메일이 곧 옵니다 (스팸함도 확인해 주세요).');
+  $('jointest').onclick = () => run('test', '보내는 중…', () => '✅ 테스트 메일을 보냈습니다. 1분 안에 옵니다.');
+  $('joinoff').onclick = () => run('unsubscribe', '끄는 중…', (r) => r.removed
+    ? '메일 알림을 껐습니다. 더는 메일이 가지 않습니다.'
+    : '등록되어 있지 않은 주소입니다.');
+}
+
+function setupPush() {
+  const topic = pushTopic();
+  $('pushguide').hidden = !topic;
+  $('pushmissing').hidden = Boolean(topic);
+  if (!topic) return;
+  $('pushtopic').textContent = topic;
+  $('pushcopy').onclick = () => copyText(topic, $('pushcopy'));
+  $('pushtest').onclick = async () => {
+    setLine('pushstate', '보내는 중…');
+    try {
+      // 헤더 없이 본문만 보낸다 — 단순 요청이라 사전 요청(OPTIONS) 없이 간다.
+      const res = await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
+        method: 'POST', body: '🔔 테스트 알림입니다. 빈자리가 나면 이렇게 옵니다.',
+      });
+      setLine('pushstate', res.ok ? '✅ 보냈습니다. 휴대폰에 알림이 왔나요?' : `보내지 못했습니다 (오류 ${res.status})`, res.ok ? 'ok' : 'bad');
+    } catch {
+      setLine('pushstate', '보내지 못했습니다. 잠시 후 다시 눌러 주세요.', 'bad');
+    }
+  };
+}
+
+async function copyText(text, button) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const was = button.textContent;
+    button.textContent = '복사됨';
+    setTimeout(() => { button.textContent = was; }, 1200);
+  } catch {
+    window.prompt('아래를 길게 눌러 복사하세요', text);
+  }
+}
+
+/* ────────────────────────── 관리자: 가족 초대 링크 ────────────────────────── */
+const CODES_KEY = 'audeum.admin.codes';
+
+function randomCode(length) {
+  const alphabet = 'abcdefghijkmnpqrstuvwxyz23456789'; // 헷갈리는 l·o·0·1 제외
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
+  return [...bytes].map((b) => alphabet[b % alphabet.length]).join('');
+}
+
+function inviteLinkFor(code, mail) {
+  return `${location.origin}${location.pathname}#join=${code}&mail=${encodeURIComponent(mail)}`;
+}
+
+function setupInvite() {
+  $('guidelink').href = `https://github.com/${REPO}/blob/main/mailer/%EC%84%A4%EC%A0%95%EB%B0%A9%EB%B2%95.md`;
+  let codes = null;
+  try { codes = JSON.parse(store.get(CODES_KEY) || 'null'); } catch { codes = null; }
+  $('mailerurl').value = store.get('audeum.admin.mailer') || '';
+
+  const draw = () => {
+    $('codes').hidden = !codes;
+    if (codes) {
+      $('c-invite').textContent = codes.invite;
+      $('c-key').textContent = codes.key;
+      $('c-topic').textContent = `audeum-${codes.invite}`;
+    }
+    const mail = $('mailerurl').value.trim();
+    const ok = Boolean(codes) && isMailerUrl(mail);
+    $('invitebox').hidden = !ok;
+    if (ok) {
+      const link = inviteLinkFor(codes.invite, mail);
+      $('invitelink').textContent = link;
+      $('familypreview').href = link;
+    } else if (mail && !isMailerUrl(mail)) {
+      setLine('invitestate', '웹 앱 URL은 https://script.google.com/macros/s/…/exec 모양이어야 합니다.', 'bad');
+    } else if (!codes) {
+      setLine('invitestate', '먼저 [무작위 코드 만들기]를 누르세요.');
+    } else {
+      setLine('invitestate', '');
+    }
+  };
+
+  $('gencodes').onclick = () => {
+    if (codes && !confirm('새 코드를 만들면 Apps Script 속성과 GitHub 시크릿도 바꿔야 하고, 예전 초대 링크는 막힙니다. 계속할까요?')) return;
+    codes = { invite: randomCode(12), key: randomCode(32) };
+    store.set(CODES_KEY, JSON.stringify(codes));
+    draw();
+  };
+  $('mailerurl').oninput = () => { store.set('audeum.admin.mailer', $('mailerurl').value.trim()); setLine('invitestate', ''); draw(); };
+
+  $('checkmailer').onclick = async () => {
+    const mail = $('mailerurl').value.trim();
+    if (!isMailerUrl(mail)) { draw(); return; }
+    setLine('invitestate', '확인 중…');
+    try {
+      const r = await (await fetch(mail)).json();
+      setLine('invitestate', r.ok ? `✅ 발송기가 응답합니다 — 지금 등록된 가족: ${r.subscribers}명` : '발송기가 이상한 응답을 했습니다.', r.ok ? 'ok' : 'bad');
+    } catch {
+      setLine('invitestate', '발송기에 닿지 못했습니다. 배포할 때 "액세스: 모든 사용자"로 했는지 확인해 주세요.', 'bad');
+    }
+  };
+
+  $('shareinvite').onclick = async () => {
+    const url = $('invitelink').textContent;
+    const text = '오디움 빈자리 알림 초대 링크입니다. 열어서 메일 주소만 넣으면 됩니다.';
+    if (navigator.share) {
+      try { await navigator.share({ title: '오디움 빈자리 알림', text, url }); return; } catch { /* 취소하면 복사로 */ }
+    }
+    await copyText(`${text}\n${url}`, $('shareinvite'));
+  };
+
+  for (const b of document.querySelectorAll('[data-copytext]')) {
+    b.onclick = () => copyText($(b.dataset.copytext).textContent, b);
+  }
+  draw();
+}
+
+$('leaveadmin').onclick = () => { store.del('audeum.admin'); };
+window.addEventListener('hashchange', () => {
+  const next = readInviteFromHash();
+  if (next) { invite = next; store.set(INVITE_KEY, JSON.stringify(invite)); setupJoin(); setupPush(); }
+  mode = decideMode();
+  applyMode();
+  refresh();
+  window.scrollTo(0, 0);
+});
+
+applyMode();
+setupJoin();
+setupPush();
+setupInvite();
 
 setAuthState(token
   ? '✅ 연결됨 — 버튼 한 번으로 등록됩니다.'
