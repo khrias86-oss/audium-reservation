@@ -10,3 +10,4 @@ recon-output/
 storage-state.json
 playwright-report/
 test-results/
+docs-site/config.json

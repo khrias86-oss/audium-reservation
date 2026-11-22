@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#141414">
-<title>오디움 빈자리 감시</title>
-<meta name="description" content="오디움 빈자리를 감시합니다. 달력에서 날짜를 눌러서 고르세요.">
+<title>오디움 빈자리 알림</title>
+<meta name="description" content="오디움 관람 날짜·회차를 고르고 메일을 넣으면, 빈자리가 나는 순간 알려 드립니다.">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="오디움 감시">
+<meta name="apple-mobile-web-app-title" content="오디움 알림">
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔔</text></svg>">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔔</text></svg>">
 <style>
@@ -20,8 +20,8 @@
     --tag-lecture: #46618c; --tag-lecture-soft: #e6ebf3;
     --tap: 46px;
   }
-  :root:not([data-theme="light"]) {
-    @media (prefers-color-scheme: dark) {
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
       --bg: #141414; --fg: #f0efec; --muted: #9a9a96; --line: #2c2c2a;
       --card: #1d1d1b; --accent: #f0efec; --accent-fg: #141414;
       --pick: #6ec48f; --pick-soft: #1e3227; --warn: #e0b968; --warn-soft: #2a2416;
@@ -42,882 +42,598 @@
   body {
     margin: 0; background: var(--bg); color: var(--fg);
     font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", system-ui, sans-serif;
-    padding: max(16px, env(safe-area-inset-top)) 16px calc(104px + env(safe-area-inset-bottom));
+    padding: max(16px, env(safe-area-inset-top)) 16px calc(96px + env(safe-area-inset-bottom));
     max-width: 560px; margin-inline: auto;
   }
   h1 { font-size: 21px; margin: 4px 0 2px; letter-spacing: -0.01em; }
-  .sub { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
   section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 12px; }
-  h2 { font-size: 13px; letter-spacing: .04em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
-  h2 b { color: var(--fg); font-weight: 600; }
+  h2 { font-size: 15px; margin: 0 0 10px; font-weight: 700; }
+  .notice { background: var(--warn-soft); color: var(--warn); font-size: 13px; border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+  .note { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+  .ok { color: var(--pick); }
+  .bad { color: var(--bad); }
+  [hidden] { display: none !important; }
 
-  .notice { background: var(--warn-soft); border: 1px solid transparent; color: var(--warn); font-size: 13px;
-            border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
-  .notice b { color: inherit; }
-
-  /* ── 프로그램(전시/렉처) 카드 ── */
-  .product-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
-  .tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
-         padding: 3px 9px; border-radius: 999px; }
+  /* ── 달력 ── */
+  .product-head { display: flex; align-items: center; gap: 8px; }
+  .tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
   .tag .dot { width: 8px; height: 8px; border-radius: 50%; }
   .tag.exhibition { color: var(--tag-exhibition); background: var(--tag-exhibition-soft); }
   .tag.exhibition .dot { background: var(--tag-exhibition); }
   .tag.lecture { color: var(--tag-lecture); background: var(--tag-lecture-soft); }
   .tag.lecture .dot { background: var(--tag-lecture); }
-  .product-title { font-size: 16px; font-weight: 700; }
-  .opennote { font-size: 13px; color: var(--muted); margin: 6px 0 10px; }
+  .opennote { font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
   .opennote b { color: var(--fg); }
-  .freshness { font-size: 11px; color: var(--muted); margin: -2px 0 12px; }
-
-  .month { text-align: center; margin-bottom: 8px; }
-  .month strong { font-size: 15px; }
-
+  .snaperr { font-size: 13px; color: var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 8px 12px; margin: 8px 0; }
+  .month { text-align: center; margin: 12px 0 8px; font-size: 15px; font-weight: 700; }
+  .monthblock + .monthblock { margin-top: 14px; }
   .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
   .dow { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0; }
   .day {
-    aspect-ratio: 1; min-height: var(--tap); border: 1px solid transparent; background: transparent;
-    color: var(--fg); border-radius: 10px; font-size: 15px; cursor: pointer;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    font-variant-numeric: tabular-nums; padding: 0; gap: 2px; position: relative;
+    aspect-ratio: 1; min-height: var(--tap); border: 1px solid transparent; background: transparent; color: var(--fg);
+    border-radius: 10px; font-size: 15px; display: flex; align-items: center; justify-content: center;
+    font-variant-numeric: tabular-nums; padding: 0; position: relative; font-family: inherit;
   }
-  .day.past, .day.notopen { color: var(--muted); opacity: .38; cursor: default; }
+  button.day { cursor: pointer; }
+  .day.past, .day.notopen { color: var(--muted); opacity: .38; }
+  .day.unknown { color: var(--muted); border: 1px dashed var(--line); }
   .day.soldout { border-color: var(--line); }
   .day.available { border-color: var(--avail); background: var(--avail-soft); color: var(--avail); font-weight: 600; }
   .day.expanded { outline: 2px solid var(--accent); outline-offset: -1px; }
-  .day .n { line-height: 1; }
   .day .pickdot { width: 5px; height: 5px; border-radius: 50%; background: var(--pick); position: absolute; bottom: 5px; }
-  .legend { font-size: 12px; color: var(--muted); margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px 16px; }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px 14px; }
   .legend span { display: inline-flex; align-items: center; gap: 5px; }
   .legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
-  .legend i.soldout { border: 1px solid var(--line); }
+  .legend i.soldout { border: 1px solid var(--muted); }
   .legend i.available { background: var(--avail-soft); border: 1px solid var(--avail); }
-  .legend i.pick { background: var(--pick); }
-
+  .legend i.unknown { border: 1px dashed var(--muted); }
+  .legend i.pick { background: var(--pick); border-radius: 50%; }
   .daypanel { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-  .daypanel-head { font-size: 14px; margin-bottom: 10px; }
-  .daypanel-head b { font-weight: 700; }
-  .placeholder { color: var(--muted); font-size: 14px; margin: 8px 0; text-align: center; padding: 12px 0; }
-
-  .chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
+  .daypanel-head { font-size: 14px; margin: 0 0 8px; }
+  .chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
   .chip {
-    min-height: var(--tap); border: 1px solid var(--line); background: transparent; color: var(--fg);
-    border-radius: 10px; font-size: 15px; cursor: pointer; font-variant-numeric: tabular-nums; padding: 2px 6px;
+    min-height: var(--tap); border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 10px;
+    font-size: 15px; cursor: pointer; font-variant-numeric: tabular-nums; padding: 2px 6px; font-family: inherit;
     display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.3;
   }
   .chip small { color: var(--muted); font-size: 11px; }
+  .chip.avail small { color: var(--avail); }
   .chip.on { background: var(--pick); color: #fff; border-color: var(--pick); font-weight: 600; }
   .chip.on small { color: rgba(255,255,255,.85); }
-  .quick { margin-top: 14px; }
-  .quick .label { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
-  .note { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+  .quick { margin-top: 12px; }
+  .quick .label { font-size: 12px; color: var(--muted); margin: 0 0 6px; }
+  .freshness { font-size: 11px; color: var(--muted); margin: 10px 0 0; }
+  .placeholder { color: var(--muted); font-size: 14px; text-align: center; padding: 18px 0; margin: 0; }
 
-  ul.picked { list-style: none; padding: 0; margin: 0; }
-  ul.picked li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
-  ul.picked li:last-child { border-bottom: 0; }
-  .rank { width: 26px; height: 26px; border-radius: 50%; background: var(--pick-soft); color: var(--pick);
-          display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
-  .what { flex: 1; font-size: 15px; }
-  .what small { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; margin-top: 2px; }
-  .icon { width: 36px; height: 36px; border: 0; background: transparent; color: var(--muted); font-size: 18px; cursor: pointer; flex: none; }
-  .icon:disabled { opacity: .25; cursor: default; }
-  .empty { color: var(--muted); font-size: 14px; margin: 0; }
-
-  ol.steps { list-style: none; padding: 0; margin: 0; counter-reset: s; }
-  ol.steps li { margin-bottom: 8px; }
-  a.step {
-    display: flex; align-items: center; gap: 12px; min-height: 54px; padding: 8px 14px;
-    border: 1px solid var(--line); border-radius: 12px; text-decoration: none; color: var(--fg); font-size: 15px;
-  }
-  a.step .n { width: 26px; height: 26px; border-radius: 50%; background: var(--pick-soft); color: var(--pick);
-              display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
-  a.step.done { border-color: var(--pick); background: var(--pick-soft); }
-  a.step .go-in { margin-left: auto; color: var(--muted); font-size: 13px; }
-
-  .setup { display: grid; gap: 10px; }
-  .setup input {
-    width: 100%; min-height: var(--tap); padding: 0 12px; font-size: 16px;
+  /* ── 신청 ── */
+  ul.picked { list-style: none; padding: 0; margin: 0 0 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+  ul.picked li { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; background: var(--pick-soft); color: var(--pick);
+                 border-radius: 999px; padding: 4px 4px 4px 12px; font-variant-numeric: tabular-nums; }
+  ul.picked button { border: 0; background: transparent; color: inherit; font-size: 16px; width: 28px; height: 28px; cursor: pointer; }
+  .empty { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+  input[type=email] {
+    width: 100%; min-height: var(--tap); padding: 0 12px; font-size: 16px; font-family: inherit;
     border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--fg);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
-  .setup .row { display: flex; gap: 8px; }
+  label.consent { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); margin: 10px 0 12px; cursor: pointer; }
+  label.consent input { width: 18px; height: 18px; margin: 1px 0 0; flex: none; }
   .btn {
-    min-height: var(--tap); padding: 0 16px; border: 1px solid var(--line); border-radius: 10px;
-    background: transparent; color: var(--fg); font-size: 15px; cursor: pointer;
+    min-height: var(--tap); padding: 0 16px; border: 1px solid var(--line); border-radius: 10px; background: transparent;
+    color: var(--fg); font-size: 15px; cursor: pointer; white-space: nowrap; font-family: inherit;
   }
   .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
-  .btn.grow { flex: 1; }
-  .ok { color: var(--pick); font-size: 13px; }
-  .bad { color: var(--bad); font-size: 13px; }
-  details summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 6px 0; }
-  details ol { padding-left: 20px; font-size: 13px; color: var(--muted); line-height: 1.7; }
-  details a { color: var(--pick); }
+  .btn.block { display: block; width: 100%; }
+  .btn:disabled { opacity: .35; cursor: default; }
+  .btn.small { min-height: 34px; padding: 0 12px; font-size: 13px; }
+  .or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; margin: 12px 0; }
+  .or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+  .status-line { font-size: 13px; margin: 10px 0 0; min-height: 1.2em; }
 
-  ul.live { list-style: none; padding: 0; margin: 0; }
-  ul.live li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
-  ul.live li:last-child { border-bottom: 0; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pick); flex: none; }
-  .dot.warn { background: var(--warn); }
-  .dot.exhibition { background: var(--tag-exhibition); }
-  .dot.lecture { background: var(--tag-lecture); }
+  /* ── 푸시 안내 ── */
+  ol.guide { padding-left: 20px; margin: 8px 0 0; font-size: 14px; line-height: 1.6; }
+  ol.guide li { margin-bottom: 10px; }
+  .storebtns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .storebtns a { font-size: 13px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--fg); text-decoration: none; }
+  .copyrow { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+  code.kv { flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; background: var(--bg);
+            border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; word-break: break-all; }
+
+  /* ── 내 알림 ── */
+  ul.mine { list-style: none; padding: 0; margin: 0; }
+  ul.mine > li { border-top: 1px solid var(--line); padding: 10px 0; }
+  ul.mine > li:first-child { border-top: 0; padding-top: 0; }
+  .mine-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .mine-head b { color: var(--fg); font-weight: 600; }
+  .mine-items { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .mine-item { display: flex; align-items: center; gap: 8px; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .mine-item span { flex: 1; }
+  details summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 6px 0 0; }
+
+  ul.tips { padding-left: 18px; margin: 0; font-size: 14px; line-height: 1.7; }
+  a.booklink { display: block; text-align: center; min-height: var(--tap); line-height: var(--tap); margin-top: 12px;
+               border: 1px solid var(--line); border-radius: 10px; color: var(--fg); text-decoration: none; font-size: 15px; }
+  footer { text-align: center; font-size: 12px; color: var(--muted); margin: 16px 0; }
 
   .bar {
     position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
-    background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(12px);
-    border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(12px); border-top: 1px solid var(--line);
   }
   .bar .inner { max-width: 560px; margin-inline: auto; }
-  .go {
-    display: block; width: 100%; min-height: 50px; border: 0; border-radius: 12px;
-    background: var(--accent); color: var(--accent-fg); font-size: 16px; font-weight: 600; cursor: pointer;
-  }
-  .go:disabled { opacity: .3; cursor: default; }
-  .hint { text-align: center; font-size: 12px; color: var(--muted); margin: 8px 0 0; }
-  a.plain { color: var(--muted); font-size: 13px; }
-  [hidden] { display: none !important; }
+  .bar .btn { min-height: 50px; font-size: 16px; }
 </style>
 </head>
 <body>
 
-<h1>오디움 빈자리 감시</h1>
-<p class="sub">달력에서 날짜를 눌러 회차를 고르세요.</p>
+<h1>오디움 빈자리 알림</h1>
+<p class="sub">원하는 날짜·회차를 고르고 메일을 넣으면, 자리가 나는 순간 알려 드립니다. 가입은 없습니다.</p>
 
 <div class="notice" id="notice" hidden></div>
 
-<section id="product-exhibition" class="product" data-product="exhibition"></section>
-<section id="product-lecture" class="product" data-product="lecture"></section>
+<section id="product-exhibition" data-product="exhibition"></section>
+<section id="product-lecture" data-product="lecture" hidden></section>
+
+<section id="apply">
+  <h2>알림 신청</h2>
+  <ul class="picked" id="picked"></ul>
+  <p class="empty" id="none">위 달력에서 날짜를 누르고 회차를 고르세요. 여러 개 골라도 됩니다.</p>
+  <input id="email" type="email" placeholder="알림 받을 메일 주소" autocomplete="email" inputmode="email"
+         autocapitalize="off" autocorrect="off" spellcheck="false">
+  <label class="consent"><input type="checkbox" id="consent">
+    <span>메일 주소는 <b>이 알림을 보내는 데만</b> 씁니다. 회차가 끝나거나 알림을 끄면 바로 지웁니다. (동의)</span></label>
+  <button class="btn primary block" id="applyslots" disabled>빈자리 알림 신청</button>
+  <div class="or">또는</div>
+  <button class="btn block" id="applyopen">다음 예약 오픈 알림 받기</button>
+  <p class="note" id="openhint"></p>
+  <p class="status-line note" id="applystate"></p>
+</section>
+
+<section id="done" hidden>
+  <h2>✅ 신청했습니다</h2>
+  <div id="donebody"></div>
+</section>
+
+<section id="mine" hidden>
+  <h2>이 기기에서 신청한 알림</h2>
+  <ul class="mine" id="minelist"></ul>
+  <p class="note">다른 기기에서 신청한 알림은 메일의 <b>"그만 받기"</b> 링크로 끌 수 있습니다.</p>
+</section>
 
 <section>
-  <h2>감시할 목록 <span id="count" style="font-weight:400"></span></h2>
-  <ul class="picked" id="picked"></ul>
-  <p class="empty" id="none">아직 없습니다. 위 달력에서 날짜와 회차를 고르면 여기에 쌓입니다.</p>
-  <p class="note">오디움은 <b>1인 1매</b>입니다. 위쪽부터 먼저 시도하고 하나가 잡히면 나머지는 멈춥니다.
-     ↑ 를 눌러 순서를 올릴 수 있습니다.</p>
+  <h2>알림이 오면 — 1분 안에 예약하는 법</h2>
+  <ul class="tips">
+    <li>취소표는 <b>몇 분 안에</b> 다시 나갑니다. 알림을 보면 바로 예약 화면을 여세요.</li>
+    <li>오디움은 <b>1인 1매</b>, <b>본인 휴대폰 인증</b>이 필요합니다. 함께 갈 사람은 각자 신청·예약하세요.</li>
+    <li>휴대폰 <b>자동완성</b>에 이름·이메일·전화번호를 넣어 두면 입력이 한 번에 끝납니다.
+      <br><small style="color:var(--muted)">아이폰: 설정 → Safari → 자동 완성 → 내 정보 / 안드로이드: Chrome → 설정 → 주소 및 기타 정보</small></li>
+    <li>한가할 때 한 번 <b>끝까지 눌러 보세요</b> (인증 직전까지). 실제 때 헤매지 않습니다.</li>
+  </ul>
+  <a class="booklink" href="https://audeum.org/booking" target="_blank" rel="noopener">오디움 예약 화면 열기 →</a>
 </section>
 
-<section id="status">
-  <h2>지금 감시 중 <span id="livecount" style="font-weight:400"></span></h2>
-  <p class="note" id="lastrun" style="margin:0 0 12px"></p>
-  <ul class="live" id="live"></ul>
-  <p class="empty" id="livenone">자동 등록을 켜면 여기에서 바로 확인할 수 있습니다.</p>
-</section>
+<footer id="sysstatus"></footer>
 
-<section id="me">
-  <h2>내 예약 정보</h2>
-  <p class="note" style="margin:0 0 12px">
-    자리가 났을 때 <b>타이핑하지 않고 붙여넣기만</b> 하려고 미리 적어 두는 칸입니다.
-    <b>이 브라우저에만 저장되고 어디로도 전송되지 않습니다.</b>
-  </p>
-  <div class="setup">
-    <div class="row"><input id="myname" placeholder="이름 (예: 홍길동)" autocomplete="name">
-      <button class="btn" data-copy="myname">복사</button></div>
-    <div class="row"><input id="myemail" type="email" placeholder="이메일" autocomplete="email" inputmode="email">
-      <button class="btn" data-copy="myemail">복사</button></div>
-    <div class="row"><input id="myphone" type="tel" placeholder="휴대폰 (예: 01012345678)" autocomplete="tel" inputmode="tel">
-      <button class="btn" data-copy="myphone">복사</button></div>
-    <p class="note" style="margin:0">
-      💡 아이폰이라면 <b>설정 → Safari → 자동 완성 → 내 정보</b>에 연락처를 지정해 두세요.
-      오디움 예약 화면에서 이름·이메일·휴대폰이 <b>한 번에</b> 채워집니다. 이 칸보다 훨씬 빠릅니다.
-    </p>
-  </div>
-</section>
-
-<section id="auth">
-  <h2>자동 등록</h2>
-  <div class="setup">
-    <p class="note" id="authstate" style="margin:0"></p>
-    <input id="token" type="password" inputmode="text" autocomplete="off"
-           autocapitalize="off" autocorrect="off" spellcheck="false"
-           placeholder="github_pat_... 또는 ghp_...">
-    <div class="row">
-      <button class="btn primary grow" id="savetoken">연결하기</button>
-      <button class="btn" id="cleartoken">해제</button>
-    </div>
-    <details>
-      <summary>토큰 만드는 법 (한 번만 하면 됩니다)</summary>
-      <ol>
-        <li><a id="tokenlink" target="_blank" rel="noopener">GitHub 토큰 만들기 화면 열기</a></li>
-        <li><b>Repository access</b>에서 <b>Only select repositories</b> → 이 저장소를 고릅니다</li>
-        <li><b>Repository permissions</b> → <b>Issues</b> 를 <b>Read and write</b> 로 바꿉니다</li>
-        <li>같은 목록의 <b>Actions</b> 를 <b>Read-only</b> 로 바꿉니다 (마지막 확인 시각을 보려고)</li>
-        <li><b>Generate token</b> → 나온 값을 복사해 위 칸에 붙여넣습니다</li>
-      </ol>
-      <p class="note">
-        토큰은 <b>이 브라우저에만</b> 저장되고 <b>github.com 외에는 전송되지 않습니다.</b>
-        권한도 이 저장소의 신청서(Issues)를 읽고 쓰는 것뿐이라, 코드나 다른 저장소는
-        건드릴 수 없습니다. 언제든 <b>해제</b>를 누르면 지워집니다.
-      </p>
-    </details>
-  </div>
-</section>
-
-<section id="submit" hidden>
-  <h2>신청서 <span id="progress" style="font-weight:400"></span></h2>
-  <p class="note" style="margin:0 0 12px">
-    아래를 <b>위에서부터 하나씩</b> 누르세요. GitHub이 열리고 내용은 이미 채워져 있습니다.
-    초록색 <b>Create</b> 버튼만 누르면 감시가 시작됩니다.
-  </p>
-  <ol class="steps" id="steps"></ol>
-</section>
-
-<p style="text-align:center;margin-top:18px">
-  <a class="plain" id="mylist" href="#">내가 감시 중인 목록 보기 →</a>
-</p>
-
-<div class="bar"><div class="inner">
-  <button class="go" id="go" disabled>감시 신청하기</button>
-  <p class="hint" id="hint">달력에서 날짜와 회차를 고르세요</p>
+<div class="bar" id="bar" hidden><div class="inner">
+  <button class="btn primary block" id="gotoapply">선택한 회차 신청하기</button>
 </div></div>
 
 <script>
-const REPO = 'khrias86-oss/audium-reservation';
-const DATA_URL = './data/availability.json';
-
 const PRODUCTS = ['exhibition', 'lecture'];
 const PRODUCT_LABEL = { exhibition: '전시', lecture: '렉처' };
-/** 이슈 본문 "관람 종류" 칸에 쓰는 문구. 감시 쪽(watch-requests.ts)이
- *  이 문자열에 "렉처"가 들어있는지만 보고 상품을 가른다 — 반드시 맞춰야 한다. */
-const KIND_TEXT = { exhibition: '전시 도슨트', lecture: '렉처 프로그램' };
-
+const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+const BOOKING_URL = 'https://audeum.org/booking';
+const EXPIRE_BEFORE_START_MS = 60 * 60_000; // 알림 서버와 같은 규칙: 회차 1시간 전에 끝난다
 const $ = (id) => document.getElementById(id);
-const DOW = ['일','월','화','수','목','금','토'];
+
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* 저장이 막힌 브라우저 — 이번 방문만 유지 */ } },
+};
+
+/** KST 오늘. 서버(build-snapshot.ts)와 같은 기준이어야 "지난 날짜" 판정이 어긋나지 않는다. */
 const today = (() => {
-  // KST 기준 오늘. 서버(build-snapshot.ts)와 같은 기준이어야 "지난 날짜"
-  // 판정이 어긋나지 않는다.
   const k = new Date(Date.now() + 9 * 3600_000);
-  return `${k.getUTCFullYear()}-${String(k.getUTCMonth() + 1).padStart(2, '0')}-${String(k.getUTCDate()).padStart(2, '0')}`;
+  return k.toISOString().slice(0, 10);
 })();
-/** `${date}T00:00:00+09:00`을 `.getDay()`로 읽으면 실행 환경(UTC 등)의
- *  로컬 타임존으로 계산되어 하루 밀릴 수 있다 — 반드시 UTC로 파싱해 UTC로 읽는다. */
-const dowOf = (dateStr) => new Date(`${dateStr}T00:00:00Z`).getUTCDay();
+/** 요일은 UTC로 파싱해 UTC로 읽는다 — 실행 환경 타임존에 따라 하루 밀리지 않게. */
+const dowOf = (date) => new Date(`${date}T00:00:00Z`).getUTCDay();
+const fmtDate = (date) => `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}(${DOW[dowOf(date)]})`;
+const fmtLong = (date) => `${Number(date.slice(5, 7))}월 ${Number(date.slice(8, 10))}일(${DOW[dowOf(date)]})`;
+const fmtAt = (at) => `${fmtLong(at.slice(0, 10))} ${at.slice(11, 16)}`;
+const slotStart = (date, time) => Date.parse(`${date}T${time}:00+09:00`);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-let availability = null;   // FullSnapshot | null (아직 못 받았거나 실패)
-let selected = { exhibition: new Set(), lecture: new Set() };  // "date|time"
-let order = [];             // "product|date|time" 순서
-let openDay = { exhibition: null, lecture: null };              // 펼쳐진 날짜
+let availability = null;  // FullSnapshot | null(불러오는 중) | undefined(실패)
+let mailerUrl = null;     // 알림 서버 주소 (config.json) — 없으면 신청을 받을 수 없다
+const selected = new Set(); // "product|date|time"
+const openDay = {};         // product → 펼친 날짜
 
-const save = () => {
-  try {
-    localStorage.setItem('audeum.v3', JSON.stringify({
-      selected: { exhibition: [...selected.exhibition], lecture: [...selected.lecture] },
-      order,
-    }));
-  } catch { /* 사파리 프라이빗 모드 등에서는 저장이 막힌다. 기능은 그대로 동작한다. */ }
-};
-const load = () => {
-  try {
-    const s = JSON.parse(localStorage.getItem('audeum.v3') || '{}');
-    for (const product of PRODUCTS) {
-      const list = s.selected?.[product];
-      // 지난 날짜는 되살리지 않는다. 남아 있으면 잡을 수 없는 것을 감시하게 된다.
-      if (Array.isArray(list)) selected[product] = new Set(list.filter((k) => k.split('|')[0] >= today));
-    }
-    if (Array.isArray(s.order)) order = s.order;
-  } catch { /* 저장된 값이 깨졌으면 빈 상태로 시작한다 */ }
-};
+/* ────────────────────────── 달력 ────────────────────────── */
 
-function snapshotOf(product) {
-  return availability?.products?.find((p) => p.product === product) ?? null;
-}
-function dayOf(product, date) {
-  return snapshotOf(product)?.days?.find((d) => d.date === date) ?? null;
-}
+const snapshotOf = (product) => availability?.products?.find((p) => p.product === product) ?? null;
+const dayOf = (product, date) => snapshotOf(product)?.days?.find((d) => d.date === date) ?? null;
+const activeProducts = () => (availability?.products ?? []).map((p) => p.product);
 
-/** 고른 것 전체. 순서는 사용자가 올린 것을 먼저, 나머지는 날짜·회차순. */
-function picks() {
-  const all = [];
-  for (const product of PRODUCTS) {
-    // 꺼진 상품을 예전에 골라 둔 게 브라우저에 남아 있어도 신청하지 않는다.
-    if (availability && !snapshotOf(product)) continue;
-    for (const key of selected[product]) {
-      const [date, time] = key.split('|');
-      all.push({ product, date, time, key: `${product}|${date}|${time}` });
-    }
-  }
-  const rank = (p) => { const i = order.indexOf(p.key); return i === -1 ? 1e9 : i; };
-  return all.sort((a, b) => rank(a) - rank(b) || (a.key < b.key ? -1 : 1));
-}
-
-function toggleSelected(product, date, time) {
-  const key = `${date}|${time}`;
-  if (selected[product].has(key)) {
-    selected[product].delete(key);
-    order = order.filter((k) => k !== `${product}|${key}`);
-  } else {
-    selected[product].add(key);
-  }
-  refresh();
-}
-
-/** 그 달에 실제로 등장하는 회차 시각들(빠른 선택용). 매진이든 여석이든 상관없다. */
-function timesInMonth(product) {
-  const snap = snapshotOf(product);
-  if (!snap) return [];
-  const set = new Set();
-  for (const d of snap.days) for (const s of d.slots ?? []) set.add(s.time);
-  return [...set].sort();
-}
-
-/** 이 시각을 가진, 지금 고를 수 있는(SOLD_OUT/AVAILABLE) 모든 날짜 키. */
-function keysForTime(product, time) {
-  const snap = snapshotOf(product);
-  if (!snap) return [];
-  return snap.days.filter((d) => d.slots?.some((s) => s.time === time)).map((d) => `${d.date}|${time}`);
-}
-
-function toggleQuickTime(product, time) {
-  const keys = keysForTime(product, time);
-  const allOn = keys.length > 0 && keys.every((k) => selected[product].has(k));
-  for (const k of keys) {
-    if (allOn) {
-      selected[product].delete(k);
-      order = order.filter((o) => o !== `${product}|${k}`);
-    } else {
-      selected[product].add(k);
-    }
-  }
-  refresh();
-}
-
+/**
+ * 다음 예약 오픈 안내. 사이트가 밝힌 시각이 있으면 그것, 없으면 감시 쪽이 지난 간격으로
+ * 추정한 값을 "예상"이라고 적어서 보여준다 — 틀릴 수 있는 값을 확정처럼 보이게 하지 않는다.
+ */
 function nextOpenText(product) {
   const snap = snapshotOf(product);
   if (!snap) return null;
-  const upcoming = snap.days.filter((d) => d.state === 'NOT_OPEN' && d.opensAt);
-  if (!upcoming.length) return null;
-  upcoming.sort((a, b) => (a.opensAt < b.opensAt ? -1 : 1));
-  const [datePart, timePart] = upcoming[0].opensAt.split('T');
-  const [, m, d] = datePart.split('-');
-  const hm = (timePart || '').slice(0, 5);
-  return `다음 예약 오픈: <b>${Number(m)}월 ${Number(d)}일(${DOW[dowOf(datePart)]}) ${hm}</b>`;
+  const nowKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 19);
+  const known = snap.days.filter((d) => d.state === 'NOT_OPEN' && d.opensAt && d.opensAt > nowKst).map((d) => d.opensAt).sort()[0];
+  if (known) return `다음 예약 오픈: <b>${fmtAt(known)}</b>`;
+  if (snap.nextOpenGuess && snap.nextOpenGuess > nowKst) return `다음 예약 오픈 <b>예상</b>: <b>${fmtAt(snap.nextOpenGuess)}</b> <span style="font-size:12px">(지난 오픈 간격으로 추정)</span>`;
+  return null;
 }
 
-function freshnessText() {
-  if (!availability?.generatedAt) return '';
-  const minutes = Math.round((Date.now() - new Date(availability.generatedAt)) / 60000);
-  const ago = minutes < 1 ? '방금' : minutes < 60 ? `${minutes}분 전`
+function ago(iso) {
+  const minutes = Math.round((Date.now() - new Date(iso)) / 60000);
+  return minutes < 1 ? '방금' : minutes < 60 ? `${minutes}분 전`
     : minutes < 1440 ? `${Math.round(minutes / 60)}시간 전` : `${Math.round(minutes / 1440)}일 전`;
-  return `달력 정보 갱신: ${ago}`;
+}
+
+/** days를 달별로 나눈다. 예전 스키마(한 달짜리)도 같은 방식으로 그려진다. */
+function monthsOf(snap) {
+  const groups = new Map();
+  for (const day of snap.days) {
+    const m = day.date.slice(0, 7);
+    if (!groups.has(m)) groups.set(m, []);
+    groups.get(m).push(day);
+  }
+  return [...groups.entries()];
+}
+
+const tappable = (day) => day.state === 'SOLD_OUT' || day.state === 'AVAILABLE';
+
+function dayCell(product, day) {
+  const n = Number(day.date.slice(-2));
+  const cls = ['day', day.state.toLowerCase().replace('_', ''), openDay[product] === day.date ? 'expanded' : ''].join(' ').trim();
+  if (!tappable(day)) {
+    const title = day.state === 'UNKNOWN' ? ' title="지금은 확인할 수 없습니다"' : '';
+    return `<div class="${cls}"${title}>${n}</div>`;
+  }
+  const picked = (day.slots ?? []).some((s) => selected.has(`${product}|${day.date}|${s.time}`));
+  return `<button class="${cls}" data-day="${day.date}" aria-label="${fmtLong(day.date)}">${n}${picked ? '<span class="pickdot"></span>' : ''}</button>`;
 }
 
 function renderProduct(product) {
   const host = $(`product-${product}`);
   const snap = snapshotOf(product);
-
-  // 어떤 상품을 보여줄지는 감시 쪽(contract.ts의 ACTIVE_PRODUCTS)이 정한다 —
-  // 데이터 파일에 없는 상품은 꺼진 것이다. 데이터가 오기 전에는 첫 상품 자리만 둔다.
+  // 보여줄 상품은 감시 쪽(contract.ts의 ACTIVE_PRODUCTS)이 정한다. 데이터에 없는 상품은 꺼진 것이다.
   host.hidden = availability ? !snap : product !== PRODUCTS[0];
   if (host.hidden) return;
 
+  const head = `<div class="product-head"><span class="tag ${product}"><span class="dot"></span>${PRODUCT_LABEL[product]}</span></div>`;
   if (!snap) {
-    host.innerHTML = `
-      <div class="product-head">
-        <span class="tag ${product}"><span class="dot"></span>${PRODUCT_LABEL[product]}</span>
-      </div>
-      <p class="placeholder">${availability === null
-        ? '달력 정보를 불러오는 중입니다…'
-        : '아직 이 프로그램의 달력 정보가 없습니다. 감시 시스템이 곧 채웁니다.'}</p>`;
+    host.innerHTML = `${head}<p class="placeholder">${availability === null ? '달력을 불러오는 중입니다…' : '달력 정보가 아직 없습니다. 잠시 후 다시 열어 주세요.'}</p>`;
     return;
   }
 
-  const [y, m] = snap.month.split('-').map(Number);
   const opennote = nextOpenText(product);
+  const hasUnknown = snap.days.some((d) => d.state === 'UNKNOWN');
+  const months = monthsOf(snap).map(([month, days]) => {
+    const [y, m] = month.split('-').map(Number);
+    return `<div class="monthblock">
+      <div class="month">${y}년 ${m}월</div>
+      <div class="grid">${DOW.map((d) => `<div class="dow">${d}</div>`).join('')}</div>
+      <div class="grid">${'<div></div>'.repeat(days[0]?.dow ?? 0)}${days.map((d) => dayCell(product, d)).join('')}</div>
+    </div>`;
+  }).join('');
 
-  const leadBlanks = snap.days.length ? snap.days[0].dow : 0;
-  let gridHtml = '';
-  for (let i = 0; i < leadBlanks; i++) gridHtml += '<div></div>';
-  for (const day of snap.days) {
-    const n = Number(day.date.slice(-2));
-    const stateCls = day.state.toLowerCase().replace('_', '');
-    const tappable = day.state === 'SOLD_OUT' || day.state === 'AVAILABLE';
-    const hasPick = tappable && (day.slots ?? []).some((s) => selected[product].has(`${day.date}|${s.time}`));
-    const expanded = openDay[product] === day.date;
-    const title = day.state === 'NOT_OPEN' && day.opensAt ? ` title="오픈 예정: ${day.opensAt.replace('T', ' ')}"` : '';
-    const cls = ['day', stateCls, expanded ? 'expanded' : ''].join(' ').trim();
-    gridHtml += tappable
-      ? `<button class="${cls}" data-day="${day.date}"><span class="n">${n}</span>${hasPick ? '<span class="pickdot"></span>' : ''}</button>`
-      : `<div class="${cls}"${title}><span class="n">${n}</span></div>`;
-  }
+  const open = openDay[product] ? dayOf(product, openDay[product]) : null;
+  const panel = open ? `<div class="daypanel">
+      <p class="daypanel-head"><b>${fmtLong(open.date)}</b> — 알림 받을 회차를 누르세요</p>
+      <div class="chips">${(open.slots ?? []).map((s) => {
+        const on = selected.has(`${product}|${open.date}|${s.time}`);
+        return `<button class="chip ${on ? 'on' : ''} ${s.available ? 'avail' : ''}" data-time="${s.time}">${s.time}<small>${s.available ? '지금 자리 있음' : '매진'}</small></button>`;
+      }).join('') || '<p class="empty">이 날짜는 회차 정보가 없습니다.</p>'}</div>
+      ${(open.slots ?? []).some((s) => s.available) ? `<p class="note">"지금 자리 있음"은 <a href="${BOOKING_URL}" target="_blank" rel="noopener" style="color:var(--avail)">바로 예약</a>할 수 있습니다.</p>` : ''}
+    </div>` : '';
 
-  const quickTimes = timesInMonth(product);
-  const quickHtml = quickTimes.length
-    ? `<div class="quick">
-        <p class="label">빠른 선택 — 이 시각을 이번 달 모든 날짜에 한 번에</p>
-        <div class="chips">${quickTimes.map((t) => {
-          const keys = keysForTime(product, t);
-          const on = keys.length > 0 && keys.every((k) => selected[product].has(k));
-          return `<button class="chip ${on ? 'on' : ''}" data-quick="${t}">${t}</button>`;
-        }).join('')}</div>
-      </div>`
-    : '';
+  const times = [...new Set(snap.days.flatMap((d) => (d.slots ?? []).map((s) => s.time)))].sort();
+  const quick = times.length > 1 ? `<div class="quick">
+      <p class="label">빠른 선택 — 이 시각을 달력의 모든 날짜에</p>
+      <div class="chips">${times.map((t) => {
+        const keys = keysForTime(product, t);
+        return `<button class="chip ${keys.length && keys.every((k) => selected.has(k)) ? 'on' : ''}" data-quick="${t}">${t}</button>`;
+      }).join('')}</div></div>` : '';
 
-  const openDate = openDay[product];
-  const openSnap = openDate ? dayOf(product, openDate) : null;
-  const panelHtml = openSnap
-    ? `<div class="daypanel">
-        <p class="daypanel-head"><b>${Number(openSnap.date.slice(5,7))}월 ${Number(openSnap.date.slice(-2))}일(${DOW[openSnap.dow]})</b> 회차</p>
-        <div class="chips">${(openSnap.slots ?? []).map((s) => {
-          const on = selected[product].has(`${openSnap.date}|${s.time}`);
-          return `<button class="chip ${on ? 'on' : ''}" data-daytime="${s.time}">${s.time}<small>${s.available ? '여석 있음' : '매진'}</small></button>`;
-        }).join('') || '<p class="empty">이 날짜는 회차 정보가 없습니다.</p>'}</div>
-      </div>`
-    : '';
-
-  host.innerHTML = `
-    <div class="product-head">
-      <span class="tag ${product}"><span class="dot"></span>${PRODUCT_LABEL[product]}</span>
-    </div>
+  host.innerHTML = `${head}
+    ${snap.error ? '<p class="snaperr">⚠️ 지금은 오디움에서 날짜 정보를 받지 못하고 있습니다. 점선 날짜는 <b>확인 불가</b>입니다.</p>' : ''}
     ${opennote ? `<p class="opennote">${opennote}</p>` : ''}
-    <div class="month"><strong>${y}년 ${m}월</strong></div>
-    <div class="grid">${DOW.map((d) => `<div class="dow">${d}</div>`).join('')}</div>
-    <div class="grid">${gridHtml}</div>
+    ${months}
     <p class="legend">
-      <span><i class="soldout"></i>매진(취소표 감시 가능)</span>
-      <span><i class="available"></i>지금 여석 있음</span>
-      <span><i class="pick"></i>내가 감시 중</span>
+      <span><i class="soldout"></i>매진 (알림 신청 가능)</span>
+      <span><i class="available"></i>지금 자리 있음</span>
+      ${hasUnknown ? '<span><i class="unknown"></i>확인 불가</span>' : ''}
+      <span><i class="pick"></i>고른 회차</span>
     </p>
-    ${panelHtml}
-    ${quickHtml}
-    <p class="freshness">${freshnessText()}</p>
-  `;
+    ${panel}${quick}
+    <p class="freshness">${availability.generatedAt ? `달력 정보: ${ago(availability.generatedAt)} 기준` : ''}</p>`;
 
   for (const b of host.querySelectorAll('[data-day]')) {
-    b.onclick = () => {
-      const date = b.dataset.day;
-      openDay[product] = openDay[product] === date ? null : date;
-      renderProduct(product);
-    };
+    b.onclick = () => { openDay[product] = openDay[product] === b.dataset.day ? null : b.dataset.day; renderProduct(product); };
   }
-  for (const b of host.querySelectorAll('[data-daytime]')) {
-    b.onclick = () => toggleSelected(product, openDay[product], b.dataset.daytime);
+  for (const b of host.querySelectorAll('[data-time]')) {
+    b.onclick = () => toggle(`${product}|${openDay[product]}|${b.dataset.time}`);
   }
   for (const b of host.querySelectorAll('[data-quick]')) {
-    b.onclick = () => toggleQuickTime(product, b.dataset.quick);
+    b.onclick = () => {
+      const keys = keysForTime(product, b.dataset.quick);
+      const allOn = keys.every((k) => selected.has(k));
+      for (const k of keys) allOn ? selected.delete(k) : selected.add(k);
+      refresh();
+    };
   }
 }
 
-function drawPicked() {
+function keysForTime(product, time) {
+  const snap = snapshotOf(product);
+  if (!snap) return [];
+  return snap.days.filter((d) => tappable(d) && d.slots?.some((s) => s.time === time)).map((d) => `${product}|${d.date}|${time}`);
+}
+
+function toggle(key) {
+  selected.has(key) ? selected.delete(key) : selected.add(key);
+  refresh();
+}
+
+/* ────────────────────────── 신청 ────────────────────────── */
+
+function picks() {
+  return [...selected].map((k) => { const [product, date, time] = k.split('|'); return { key: k, product, date, time }; })
+    .filter((p) => slotStart(p.date, p.time) - EXPIRE_BEFORE_START_MS > Date.now())
+    .sort((a, b) => (a.key < b.key ? -1 : 1));
+}
+
+function drawApply() {
   const list = picks();
-  $('picked').innerHTML = list.map((p, i) => {
-    return `<li>
-      <span class="rank">${i + 1}</span>
-      <span class="what">${Number(p.date.slice(5,7))}월 ${Number(p.date.slice(-2))}일 (${DOW[dowOf(p.date)]}) ${p.time}
-        <small><span class="dot ${p.product}" style="width:6px;height:6px"></span>${PRODUCT_LABEL[p.product]}</small></span>
-      <button class="icon" data-up="${p.key}" aria-label="순서 올리기" ${i === 0 ? 'disabled' : ''}>↑</button>
-      <button class="icon" data-rm="${p.key}" aria-label="빼기">×</button>
-    </li>`;
-  }).join('');
-
-  for (const b of $('picked').querySelectorAll('[data-up]')) {
-    b.onclick = () => {
-      const key = b.dataset.up;
-      const keys = picks().map((p) => p.key);
-      const i = keys.indexOf(key);
-      if (i > 0) { keys.splice(i, 1); keys.splice(i - 1, 0, key); order = keys; }
-      refresh();
-    };
-  }
-  for (const b of $('picked').querySelectorAll('[data-rm]')) {
-    b.onclick = () => {
-      const [product, date, time] = b.dataset.rm.split('|');
-      selected[product].delete(`${date}|${time}`);
-      order = order.filter((k) => k !== b.dataset.rm);
-      refresh();
-    };
-  }
-
+  const multi = activeProducts().length > 1;
+  $('picked').innerHTML = list.map((p) => `<li>${multi ? `${PRODUCT_LABEL[p.product]} ` : ''}${fmtDate(p.date)} ${p.time}
+      <button data-rm="${p.key}" aria-label="빼기">×</button></li>`).join('');
+  for (const b of $('picked').querySelectorAll('[data-rm]')) b.onclick = () => toggle(b.dataset.rm);
   $('none').hidden = list.length > 0;
-  $('count').textContent = list.length ? `${list.length}건` : '';
-  $('go').disabled = list.length === 0;
-  $('hint').textContent = list.length
-    ? (token ? `누르면 ${list.length}건이 바로 등록됩니다` : `${list.length}건 — 신청서를 하나씩 열어야 합니다`)
-    : '달력에서 날짜와 회차를 고르세요';
+  $('applyslots').disabled = list.length === 0 || !mailerUrl;
+  $('applyslots').textContent = list.length ? `빈자리 알림 신청 (${list.length}개)` : '빈자리 알림 신청';
+  $('applyopen').disabled = !mailerUrl;
+  $('bar').hidden = list.length === 0;
+  $('gotoapply').textContent = `선택한 ${list.length}개 회차 신청하기 ↓`;
+  $('openhint').textContent = '원하는 날짜가 아직 안 열렸다면 — 예약이 열리기 약 1시간 반 전과 열린 직후에 알려 드립니다.';
 }
 
-function issueBody(p, rank) {
-  return [
-    '### 관람 희망 날짜', '', p.date, '',
-    '### 희망 회차', '', p.time, '',
-    '### 관람 종류', '', KIND_TEXT[p.product], '',
-    '### 우선순위', '', String(Math.min(rank, 4)), '',
-    '### 확인', '', '- [X] 본인 명의로 예약하며, 가지 못하게 되면 즉시 취소하겠습니다.',
-  ].join('\n');
+function setState(text, cls) {
+  $('applystate').textContent = text;
+  $('applystate').className = `status-line ${cls || 'note'}`;
 }
 
-function issueUrl(p, rank) {
-  const body = issueBody(p, rank);
-  return `https://github.com/${REPO}/issues/new?labels=watch-request`
-    + `&title=${encodeURIComponent(`[감시] ${PRODUCT_LABEL[p.product]} ${p.date} ${p.time}`)}`
-    + `&body=${encodeURIComponent(body)}`;
+async function callServer(body) {
+  const res = await fetch(mailerUrl, {
+    method: 'POST',
+    // text/plain: application/json이면 브라우저가 사전 요청(OPTIONS)을 보내는데 Apps Script는 그걸 받지 못한다.
+    headers: { 'content-type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body),
+  });
+  return res.json();
 }
+
+/** 이 페이지가 GitHub Pages가 아닌 곳(Claude 미리보기 등)에서 열렸는지 — 그곳은 외부 요청이 막힌다. */
+const looksLikePreview = () => !/\.github\.io$/.test(location.hostname) && !/^(localhost|127\.)/.test(location.hostname);
+
+async function apply(kind) {
+  const email = $('email').value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setState('메일 주소를 확인해 주세요.', 'bad'); $('email').focus(); return; }
+  if (!$('consent').checked) { setState('메일 주소 사용에 동의해 주세요 (체크 상자).', 'bad'); return; }
+  store.set('audeum.email', email);
+
+  const requests = [];
+  if (kind === 'open') {
+    requests.push({ action: 'subscribe', kind: 'open', product: activeProducts()[0] ?? 'exhibition', email });
+  } else {
+    const byProduct = new Map();
+    for (const p of picks()) {
+      if (!byProduct.has(p.product)) byProduct.set(p.product, []);
+      byProduct.get(p.product).push({ date: p.date, time: p.time });
+    }
+    for (const [product, slots] of byProduct) requests.push({ action: 'subscribe', kind: 'slot', product, slots, email });
+  }
+  if (requests.length === 0) return;
+
+  $('applyslots').disabled = $('applyopen').disabled = true;
+  setState('신청하는 중…');
+  const done = [];
+  try {
+    for (const req of requests) {
+      const r = await callServer(req);
+      if (!r.ok) { setState(r.error || '신청하지 못했습니다.', 'bad'); break; }
+      done.push({ topic: r.topic, email, kind: req.kind, product: req.product, items: r.items, mailed: r.mailed, at: Date.now() });
+    }
+  } catch {
+    setState(looksLikePreview()
+      ? '이 미리보기 화면에서는 신청이 막힙니다. 공개 주소(…github.io)에서 열어 주세요.'
+      : '알림 서버에 닿지 못했습니다. 잠시 후 다시 눌러 주세요.', 'bad');
+  }
+  if (done.length) {
+    saveMine([...done, ...loadMine()]);
+    if (kind !== 'open') selected.clear();
+    setState('');
+    showDone(done);
+    drawMine();
+    refresh();
+    void loadStatus();
+  } else {
+    drawApply();
+  }
+}
+
+/* ────────────────────────── 휴대폰 푸시 (ntfy) ────────────────────────── */
 
 /**
- * 신청서를 한 건씩 눌러서 여는 목록으로 보여준다.
- *
- * 처음에는 버튼 한 번으로 여러 탭을 열려고 했는데, 그건 동작하지 않는다.
- * 첫 건에서 `location.href`로 현재 창을 넘겨버리면 나머지를 열 예정이던
- * 타이머가 페이지와 함께 사라지고, 새 탭으로 열면 사파리가 팝업으로 막는다.
- * 어느 쪽이든 첫 건만 등록되고 사용자는 나머지가 빠진 줄 모른다.
- *
- * 그래서 사용자가 직접 누르는 링크로 바꿨다. 탭마다 사용자의 제스처가 있으니
- * 차단되지 않고, 무엇이 남았는지 눈에 보인다.
+ * 신청 1건마다 ntfy 채널이 하나씩 있다. 그 채널에는 그 신청의 알림만 온다.
+ * 구독은 앱에서 ＋ → 채널 이름 붙여넣기 한 번이면 끝난다.
  */
-let opened = new Set();
-function drawSteps() {
-  const list = picks();
-  $('steps').innerHTML = list.map((p, i) => {
-    return `<li><a class="step ${opened.has(p.key) ? 'done' : ''}" data-k="${p.key}"
-      href="${issueUrl(p, i + 1)}" target="_blank" rel="noopener">
-      <span class="n">${opened.has(p.key) ? '✓' : i + 1}</span>
-      <span>${PRODUCT_LABEL[p.product]} · ${Number(p.date.slice(5,7))}월 ${Number(p.date.slice(-2))}일 (${DOW[dowOf(p.date)]}) ${p.time}</span>
-      <span class="go-in">${opened.has(p.key) ? '열었음' : '열기'}</span>
-    </a></li>`;
-  }).join('');
-  for (const a of $('steps').querySelectorAll('[data-k]')) {
-    a.onclick = () => { opened.add(a.dataset.k); setTimeout(drawSteps, 60); };
+function pushGuide(topic) {
+  return `<ol class="guide">
+    <li><b>ntfy 앱 설치</b> (무료·가입 없음)
+      <div class="storebtns">
+        <a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noopener">아이폰</a>
+        <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener">안드로이드</a>
+      </div></li>
+    <li>앱에서 <b>＋</b> → 아래 이름 붙여넣기 → <b>Subscribe</b>
+      <div class="copyrow"><code class="kv">${esc(topic)}</code><button class="btn small" data-copy="${esc(topic)}">복사</button></div></li>
+    <li><button class="btn small" data-testpush="${esc(topic)}">테스트 푸시 보내기</button> → 폰에 알림이 오면 끝
+      <div class="status-line note" data-pushstate="${esc(topic)}"></div></li>
+  </ol>`;
+}
+
+function bindPushButtons(root) {
+  for (const b of root.querySelectorAll('[data-copy]')) {
+    b.onclick = async () => {
+      try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = '복사됨'; setTimeout(() => { b.textContent = '복사'; }, 1200); }
+      catch { window.prompt('길게 눌러 복사하세요', b.dataset.copy); }
+    };
   }
-  $('progress').textContent = `· ${opened.size}/${list.length} 완료`;
+  for (const b of root.querySelectorAll('[data-testpush]')) {
+    b.onclick = async () => {
+      const topic = b.dataset.testpush;
+      const line = root.querySelector(`[data-pushstate="${topic}"]`);
+      line.textContent = '보내는 중…';
+      try {
+        // 헤더 없이 본문만 — 단순 요청이라 사전 요청 없이 간다.
+        const res = await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, { method: 'POST', body: '🔔 테스트 알림입니다. 빈자리가 나면 이렇게 옵니다.' });
+        line.textContent = res.ok ? '✅ 보냈습니다. 폰에 알림이 왔나요? 안 왔다면 2번(구독)을 확인하세요.' : `보내지 못했습니다 (오류 ${res.status})`;
+        line.className = `status-line ${res.ok ? 'ok' : 'bad'}`;
+      } catch {
+        line.textContent = '보내지 못했습니다. 잠시 후 다시 눌러 주세요.';
+        line.className = 'status-line bad';
+      }
+    };
+  }
+}
+
+function describeSub(sub) {
+  if (sub.kind === 'open') return `${PRODUCT_LABEL[sub.product]} 다음 예약 오픈 알림`;
+  return sub.items.map((i) => `${fmtDate(i.date)} ${i.time}`).join(', ');
+}
+
+function showDone(list) {
+  $('done').hidden = false;
+  $('donebody').innerHTML = list.map((sub) => `
+    <p style="margin:0 0 6px"><b>${esc(describeSub(sub))}</b></p>
+    <p class="note" style="margin:0 0 10px">${sub.mailed
+      ? `<b>${esc(sub.email)}</b>로 확인 메일을 보냈습니다. 안 보이면 스팸함을 확인하고 "스팸 아님"으로 표시해 주세요.`
+      : `<b>${esc(sub.email)}</b>로 알림이 갑니다. (오늘은 확인 메일을 생략했습니다)`}
+      ${sub.kind === 'open' ? '' : '<br>자리가 나면 즉시 1번, 10분 뒤에도 남아 있으면 1번 더 알려 드립니다.'}</p>
+    <h2 style="margin-top:14px">📱 휴대폰 푸시로도 받기 <span style="font-weight:400;color:var(--muted);font-size:13px">(선택)</span></h2>
+    <p class="note" style="margin:0">메일보다 빨리 옵니다. 이 채널에는 <b>이번 신청 알림만</b> 옵니다.</p>
+    ${pushGuide(sub.topic)}`).join('<hr style="border:0;border-top:1px solid var(--line);margin:14px 0">');
+  bindPushButtons($('done'));
+  $('done').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ────────────────────────── 이 기기에서 신청한 알림 ────────────────────────── */
+
+const MINE_KEY = 'audeum.mine.v1';
+function loadMine() {
+  try {
+    const list = JSON.parse(store.get(MINE_KEY) || '[]');
+    // 끝난 것은 지운다 — 서버와 같은 규칙 (회차 1시간 전, 오픈 알림 60일).
+    return (Array.isArray(list) ? list : []).map((s) => ({
+      ...s,
+      items: s.kind === 'open'
+        ? (Date.now() - s.at < 60 * 86400_000 ? s.items : [])
+        : s.items.filter((i) => slotStart(i.date, i.time) - EXPIRE_BEFORE_START_MS > Date.now()),
+    })).filter((s) => s.items.length > 0);
+  } catch { return []; }
+}
+function saveMine(list) { store.set(MINE_KEY, JSON.stringify(list)); }
+
+function drawMine() {
+  const list = loadMine();
+  $('mine').hidden = list.length === 0;
+  $('minelist').innerHTML = list.map((sub, si) => `<li>
+    <div class="mine-head">📧 <b>${esc(sub.email)}</b></div>
+    <div class="mine-items">${sub.items.map((i, ii) => `<div class="mine-item">
+      <span>${sub.kind === 'open' ? `${PRODUCT_LABEL[sub.product]} 다음 예약 오픈` : `${PRODUCT_LABEL[sub.product]} ${fmtDate(i.date)} ${i.time}`}</span>
+      <button class="btn small" data-cancel="${si}:${ii}">알림 끄기</button></div>`).join('')}</div>
+    <details><summary>휴대폰 푸시 설정 (채널 ${esc(sub.topic)})</summary>${pushGuide(sub.topic)}</details>
+  </li>`).join('');
+  bindPushButtons($('minelist'));
+  for (const b of $('minelist').querySelectorAll('[data-cancel]')) {
+    b.onclick = async () => {
+      const [si, ii] = b.dataset.cancel.split(':').map(Number);
+      const all = loadMine();
+      const item = all[si]?.items[ii];
+      if (!item) return;
+      b.disabled = true;
+      b.textContent = '끄는 중…';
+      try {
+        const r = await callServer({ action: 'cancel', id: item.id, token: item.token });
+        // "이미 없음"도 끈 것으로 본다 — 메일 링크로 먼저 껐거나 회차가 끝난 경우다.
+        if (r.ok || /이미|없는/.test(r.error || '')) {
+          all[si].items.splice(ii, 1);
+          saveMine(all.filter((s) => s.items.length > 0));
+        }
+      } catch { /* 연결 실패 — 목록은 그대로 둔다 */ }
+      drawMine();
+    };
+  }
+}
+
+/* ────────────────────────── 상태 · 불러오기 ────────────────────────── */
+
+async function loadStatus() {
+  if (!mailerUrl) return;
+  try {
+    const r = await callServer({ action: 'status' });
+    if (!r.ok) return;
+    const parts = [`지금 받고 있는 알림 신청 ${r.active}건`];
+    if (r.lastReportAt) parts.push(`마지막 확인 ${ago(r.lastReportAt)}`);
+    const stale = r.active > 0 && r.lastReportAt && Date.now() - new Date(r.lastReportAt) > 30 * 60_000;
+    $('sysstatus').innerHTML = parts.join(' · ') + (stale ? ' <span class="bad">— 확인이 늦어지고 있습니다</span>' : '');
+  } catch { /* 상태 표시는 부가 기능이다 */ }
+}
+
+async function loadConfig() {
+  try {
+    const res = await fetch(`./config.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (res.ok) {
+      const c = await res.json();
+      if (/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(c.mailerUrl || '')) mailerUrl = c.mailerUrl;
+    }
+  } catch { /* 아래에서 안내한다 */ }
+  if (!mailerUrl) {
+    $('notice').hidden = false;
+    $('notice').innerHTML = '<b>알림 신청을 준비하고 있습니다.</b> 지금은 달력만 볼 수 있습니다.';
+  }
+}
+
+async function loadAvailability() {
+  try {
+    const res = await fetch(`./data/availability.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(String(res.status));
+    availability = await res.json();
+  } catch {
+    availability = undefined;
+    $('notice').hidden = false;
+    $('notice').innerHTML = '<b>달력 정보를 불러오지 못했습니다.</b> 잠시 후 새로고침해 주세요.';
+  }
 }
 
 function refresh() {
   for (const product of PRODUCTS) renderProduct(product);
-  drawPicked();
-  if (!$('submit').hidden) drawSteps();
-  save();
+  drawApply();
 }
 
-/** 당월 가용성 스냅샷. 사이트에 직접 묻지 않고, 감시 시스템이 매 틱마다
- *  같은 저장소에 커밋해 두는 정적 JSON을 읽는다 — CORS도, 토큰도 필요 없다. */
-async function loadAvailability() {
-  try {
-    const res = await fetch(`${DATA_URL}?t=${Date.now()}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error(String(res.status));
-    availability = await res.json();
-  } catch {
-    availability = undefined; // "실패"와 "아직 응답 전(null)"을 구분한다
-    $('notice').hidden = false;
-    $('notice').innerHTML = '<b>달력 정보를 불러오지 못했습니다.</b> 감시 시스템이 아직 첫 실행을 마치지 않았거나, ' +
-      '일시적인 문제일 수 있습니다. 잠시 후 새로고침해 주세요.';
-  }
-  refresh();
-}
+$('applyslots').onclick = () => apply('slot');
+$('applyopen').onclick = () => apply('open');
+$('gotoapply').onclick = () => { $('apply').scrollIntoView({ behavior: 'smooth', block: 'start' }); setTimeout(() => $('email').focus(), 400); };
+$('email').value = store.get('audeum.email') || '';
 
-/* ────────────────────────── 자동 등록 ──────────────────────────
- *
- * 처음에는 미리 채워진 GitHub 주소를 열어 사용자가 직접 제출하게 했다.
- * 그 방식이 조용히 실패했다 — GitHub 모바일 웹은 주소에 담아 보낸
- * `?labels=` 를 그리지도, 적용하지도 않는다. 제목과 본문은 채워지므로
- * 사용자 눈에는 정상으로 보이고, 감시 쪽은 그 신청을 영원히 못 봤다.
- *
- * 감시 쪽은 라벨에 의존하지 않도록 이미 고쳤지만, 근본 문제는 남는다.
- * 신청 한 건마다 사람이 화면을 옮겨다니며 눌러야 한다는 것.
- *
- * 그래서 토큰을 한 번 받아 두고 API로 직접 만든다. 토큰은 이 브라우저의
- * localStorage에만 있고 api.github.com 외에는 나가지 않는다. 권한도 이
- * 저장소의 Issues 하나뿐이라, 새어 나가더라도 할 수 있는 일이 신청서를
- * 읽고 쓰는 것으로 한정된다.
- */
-
-const TOKEN_KEY = 'audeum.token';
-let token = null;
-try { token = localStorage.getItem(TOKEN_KEY); } catch { /* 저장이 막힌 브라우저 */ }
-
-const api = (path, init = {}) =>
-  fetch(`https://api.github.com/repos/${REPO}${path}`, {
-    ...init,
-    headers: {
-      accept: 'application/vnd.github+json',
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-      ...(init.headers || {}),
-    },
-  });
-
-/**
- * 이 페이지가 Claude 미리보기(아티팩트) 안에서 열렸는지 짐작한다.
- *
- * Claude 아티팩트는 보안 정책(CSP)으로 임의의 외부 서버로 가는 fetch를 전부
- * 막는다 — api.github.com도 예외가 아니다. 그 상태에서 fetch가 실패하면
- * 평범한 네트워크 오류(offline)와 똑같은 예외로 보이므로, 구분 없이
- * "인터넷을 확인하라"고 안내하면 사실과 다른 말을 하게 된다.
- * GitHub Pages 주소(...github.io)가 아니면 미리보기로 보고 원인을 정확히 말한다.
- */
-function looksLikePreview() {
-  return !/\.github\.io$/.test(location.hostname);
-}
-
-function setAuthState(text, cls) {
-  const el = $('authstate');
-  el.textContent = text;
-  el.className = cls ? cls : 'note';
-}
-
-async function connect(candidate) {
-  const previous = token;
-  token = candidate;
-  setAuthState('확인 중…');
-  let res;
-  try {
-    res = await api('');
-  } catch {
-    token = previous;
-    // 이 예외는 거의 항상 "인터넷이 끊김"이 아니라 "미리보기 화면이라 막힘"이다.
-    // 실제 인터넷 문제라고 안내하면 사용자가 애먼 곳(와이파이·데이터)을 고치려 든다.
-    setAuthState(
-      looksLikePreview()
-        ? '이 미리보기 화면에서는 보안 정책 때문에 자동 등록이 작동하지 않습니다. '
-          + '지금은 아래 "감시 신청하기"로 하나씩 등록해 주세요. '
-          + 'GitHub Pages를 켜신 뒤 그 주소(...github.io)에서 열면 자동 등록도 됩니다.'
-        : '인터넷 연결을 확인해 주세요.',
-      'bad',
-    );
-    return false;
-  }
-  if (!res.ok) {
-    token = previous;
-    // 401은 토큰이 틀린 것, 404는 이 저장소에 권한이 없는 것이다.
-    // 둘을 뭉뚱그리면 사용자가 어디를 고쳐야 할지 알 수 없다.
-    setAuthState(
-      res.status === 401 ? '토큰이 올바르지 않습니다. 다시 복사해 주세요.'
-      : res.status === 404 ? '이 저장소에 대한 권한이 없습니다. 토큰을 만들 때 저장소를 골랐는지 확인해 주세요.'
-      : `연결하지 못했습니다 (오류 ${res.status})`,
-      'bad',
-    );
-    return false;
-  }
-  try { localStorage.setItem(TOKEN_KEY, token); } catch { /* 저장이 막혀도 이번 세션은 동작한다 */ }
-  setAuthState('✅ 연결됨 — 이제 버튼 한 번으로 등록됩니다.', 'ok');
-  $('token').value = '';
-  await loadLive();
-  void loadLastRun();
-  drawPicked();
-  return true;
-}
-
-$('savetoken').onclick = () => {
-  const value = $('token').value.trim();
-  if (!value) { setAuthState('토큰을 붙여넣어 주세요.', 'bad'); return; }
-  void connect(value);
-};
-
-$('cleartoken').onclick = () => {
-  token = null;
-  try { localStorage.removeItem(TOKEN_KEY); } catch { /* 이미 없으면 그만이다 */ }
-  setAuthState('해제했습니다. 링크를 눌러 직접 등록하는 방식으로 돌아갑니다.');
-  $('live').innerHTML = '';
-  $('livenone').hidden = false;
-  $('livecount').textContent = '';
-  $('lastrun').textContent = '';
-  drawPicked();
-};
-
-$('tokenlink').href = 'https://github.com/settings/personal-access-tokens/new';
-
-/** 이슈 본문에서 "관람 종류" 칸을 읽어 상품을 가른다. watch-requests.ts와 같은 규칙. */
-function productOf(body) {
-  const m = (body || '').match(/###\s*관람 종류\s*\n+([^\n#]+)/i);
-  return (m?.[1] || '').includes('렉처') ? 'lecture' : 'exhibition';
-}
-
-/** 지금 감시 중인 신청서를 보여준다. "돌고 있나?"에 답하는 화면이다. */
-async function loadLive() {
-  if (!token) { $('livenone').hidden = false; return; }
-  let issues;
-  try {
-    const res = await api('/issues?state=open&per_page=100');
-    if (!res.ok) throw new Error(String(res.status));
-    issues = await res.json();
-  } catch {
-    $('livenone').hidden = false;
-    $('livenone').textContent = '감시 현황을 불러오지 못했습니다.';
-    return;
-  }
-
-  // 신청서와 알림을 나눈다. 감시 쪽과 같은 규칙으로 판별해야 화면과 실제가 어긋나지 않는다.
-  const rows = [];
-  for (const it of issues) {
-    const labels = (it.labels || []).map((l) => (typeof l === 'string' ? l : l.name));
-    const body = it.body || '';
-    if (labels.includes('audeum-alert')) {
-      rows.push({ alert: true, title: it.title, url: it.html_url });
-    } else if (body.includes('### 관람 희망 날짜') || (it.title || '').startsWith('[감시]')) {
-      const date = (body.match(/### 관람 희망 날짜\s*\n+([^\n]+)/) || [])[1];
-      const time = (body.match(/### 희망 회차\s*\n+([^\n]+)/) || [])[1];
-      rows.push({
-        alert: false, product: productOf(body),
-        date: (date || '').trim(), time: (time || '').trim(), url: it.html_url, number: it.number,
-      });
-    }
-  }
-
-  rows.sort((a, b) => Number(b.alert) - Number(a.alert));
-  $('live').innerHTML = rows.map((r) => r.alert
-    ? `<li><span class="dot warn"></span><a href="${r.url}" target="_blank" rel="noopener">${r.title}</a></li>`
-    : `<li><span class="dot ${r.product}"></span><span style="flex:1">${PRODUCT_LABEL[r.product]} · ${r.date} ${r.time}</span>
-         <a href="${r.url}" target="_blank" rel="noopener" style="color:var(--muted);font-size:13px">#${r.number}</a></li>`
-  ).join('');
-
-  const watching = rows.filter((r) => !r.alert).length;
-  $('livecount').textContent = watching ? `${watching}건` : '';
-  $('livenone').hidden = rows.length > 0;
-  $('livenone').textContent = token
-    ? '감시 중인 신청이 없습니다. 아래에서 골라 등록하세요.'
-    : '자동 등록을 켜면 여기에서 바로 확인할 수 있습니다.';
-}
-
-/**
- * 마지막으로 감시가 돈 시각.
- *
- * ## 왜 이 줄이 필요한가
- *
- * 감시가 통째로 멈춘 적이 있다. 워크플로가 기본 브랜치에 없어서 예약된 실행이
- * 한 번도 일어나지 않았는데, **화면 어디에도 그 사실이 드러나지 않았다.**
- * 신청서는 잘 등록돼 있었고 오류도 없었으니, 사용자가 알아챌 방법이 없었다.
- *
- * 조용히 멈추는 감시는 없는 감시보다 나쁘다. 없으면 직접 보기라도 한다.
- * 그래서 "마지막으로 언제 돌았는지"를 항상 보이게 둔다.
- *
- * 지금은 화~토 24시간, 5분 간격(105분씩 스스로 이어지는 실행)으로 돈다 —
- * "감시 시간대" 개념 자체가 없으므로, 그냥 마지막 실행이 얼마나 됐는지만 본다.
- */
-async function loadLastRun() {
-  if (!token) { $('lastrun').textContent = ''; return; }
-  let run;
-  try {
-    const res = await api('/actions/workflows/watch.yml/runs?per_page=1');
-    if (!res.ok) {
-      // Actions 읽기 권한이 없으면 여기로 온다. 기능이 하나 빠질 뿐이므로
-      // 경고가 아니라 안내로 말한다.
-      $('lastrun').textContent = res.status === 403
-        ? '마지막 확인 시각을 보려면 토큰에 Actions 읽기 권한이 필요합니다.'
-        : '';
-      return;
-    }
-    run = (await res.json()).workflow_runs?.[0];
-  } catch { return; }
-
-  if (!run) {
-    $('lastrun').innerHTML = '⚠️ <b>아직 한 번도 확인이 실행되지 않았습니다.</b>';
-    $('lastrun').className = 'bad';
-    return;
-  }
-
-  const minutes = Math.round((Date.now() - new Date(run.run_started_at || run.created_at)) / 60000);
-  const ago = minutes < 1 ? '방금' : minutes < 60 ? `${minutes}분 전`
-    : minutes < 1440 ? `${Math.round(minutes / 60)}시간 전` : `${Math.round(minutes / 1440)}일 전`;
-
-  // 화~토는 24시간 돈다. 그 요일이면 20분 넘게 안 돌았을 때만 경고한다
-  // (5분 간격 폴링 + 여유). 일·월은 원래 쉬는 요일이라 오래돼도 정상이다.
-  const kst = new Date(Date.now() + 9 * 3600_000);
-  const watchingDay = kst.getUTCDay() >= 2 && kst.getUTCDay() <= 6;
-  const stale = watchingDay && minutes > 20;
-
-  $('lastrun').innerHTML = stale
-    ? `⚠️ <b>마지막 확인이 ${ago}입니다.</b> 지금은 5분마다 돌아야 하는 요일입니다 — 감시가 멈췄을 수 있습니다.`
-    : `마지막 확인: <b>${ago}</b>${watchingDay ? '' : ' (일·월은 쉽니다)'}`;
-  $('lastrun').className = stale ? 'bad' : 'note';
-}
-
-/** 이미 같은 상품·날짜·회차를 감시 중인지. 중복 신청을 만들지 않는다. */
-async function existingKeys() {
-  const keys = new Set();
-  try {
-    const res = await api('/issues?state=open&per_page=100');
-    if (!res.ok) return keys;
-    for (const it of await res.json()) {
-      const body = it.body || '';
-      const date = (body.match(/### 관람 희망 날짜\s*\n+([^\n]+)/) || [])[1];
-      const time = (body.match(/### 희망 회차\s*\n+([^\n]+)/) || [])[1];
-      if (date && time) keys.add(`${productOf(body)}|${date.trim()}|${time.trim()}`);
-    }
-  } catch { /* 못 읽으면 중복 검사만 생략한다 — 등록 자체는 막지 않는다 */ }
-  return keys;
-}
-
-async function registerAll() {
-  const list = picks();
-  $('submit').hidden = false;
-  const already = await existingKeys();
-  const results = [];
-
-  for (let i = 0; i < list.length; i++) {
-    const p = list[i];
-    if (already.has(p.key)) { results.push({ p, state: 'dup' }); drawResults(results, list.length); continue; }
-    try {
-      const res = await api('/issues', {
-        method: 'POST',
-        body: JSON.stringify({
-          title: `[감시] ${PRODUCT_LABEL[p.product]} ${p.date} ${p.time}`,
-          body: issueBody(p, i + 1),
-          labels: ['watch-request'],
-        }),
-      });
-      results.push({ p, state: res.ok ? 'ok' : 'fail', code: res.status });
-    } catch {
-      results.push({ p, state: 'fail' });
-    }
-    drawResults(results, list.length);
-  }
-
-  await loadLive();
-  $('status').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function drawResults(results, total) {
-  const mark = { ok: '✅ 등록됨', dup: '이미 감시 중', fail: '⚠️ 실패' };
-  $('progress').textContent = `· ${results.length}/${total}`;
-  $('steps').innerHTML = results.map((r) => {
-    return `<li><div class="step ${r.state === 'fail' ? '' : 'done'}">
-      <span class="n">${r.state === 'fail' ? '!' : '✓'}</span>
-      <span>${PRODUCT_LABEL[r.p.product]} · ${Number(r.p.date.slice(5,7))}월 ${Number(r.p.date.slice(-2))}일 (${DOW[dowOf(r.p.date)]}) ${r.p.time}</span>
-      <span class="go-in">${mark[r.state]}${r.code ? ` (${r.code})` : ''}</span>
-    </div></li>`;
-  }).join('');
-}
-
-$('go').onclick = () => {
-  if (token) { void registerAll(); return; }
-  opened = new Set();
-  $('submit').hidden = false;
-  drawSteps();
-  $('submit').scrollIntoView({ behavior: 'smooth', block: 'start' });
-};
-
-$('mylist').href = `https://github.com/${REPO}/issues?q=is%3Aissue+is%3Aopen+label%3Awatch-request`;
-
-/* 예약 정보 — 이 브라우저에만 남는다. 커밋되지도, 전송되지도 않는다. */
-const ME = ['myname', 'myemail', 'myphone'];
-for (const id of ME) {
-  try { $(id).value = localStorage.getItem(`audeum.${id}`) || ''; } catch { /* 저장이 막힌 브라우저 */ }
-  $(id).oninput = () => {
-    try { localStorage.setItem(`audeum.${id}`, $(id).value); } catch { /* 이번 세션만 유지된다 */ }
-  };
-}
-for (const b of document.querySelectorAll('[data-copy]')) {
-  b.onclick = async () => {
-    const value = $(b.dataset.copy).value;
-    if (!value) return;
-    try {
-      await navigator.clipboard.writeText(value);
-      const was = b.textContent;
-      b.textContent = '복사됨';
-      setTimeout(() => { b.textContent = was; }, 1200);
-    } catch {
-      // 클립보드가 막히면(구형 사파리, 비보안 컨텍스트) 선택해 주는 것까지가 최선이다.
-      $(b.dataset.copy).select();
-    }
-  };
-}
-
-setAuthState(token
-  ? '✅ 연결됨 — 버튼 한 번으로 등록됩니다.'
-  : '아직 연결되지 않았습니다. 지금은 신청서를 하나씩 눌러 열어야 합니다.',
-  token ? 'ok' : 'note');
-
-load();
-for (const product of PRODUCTS) renderProduct(product);
-drawPicked();
-void loadAvailability();
-void loadLive();
-void loadLastRun();
+refresh();
+drawMine();
+Promise.all([loadConfig(), loadAvailability()]).then(() => { refresh(); void loadStatus(); });
 </script>
 </body>
 </html>

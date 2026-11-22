@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { createGitHubIssueNotifier, slotLabel } from '../src/notify/github-issue.js';
+import { alertLabel, createGitHubIssueNotifier } from '../src/notify/github-issue.js';
 import type { Notification } from '../src/notify/types.js';
 import type { Slot, Watch } from '../src/core/types.js';
 
@@ -16,7 +16,7 @@ const needsAction: Notification = {
   kind: 'NEEDS_ACTION', watch, slot, reason: '본인인증 요구', resumeUrl: 'https://audeum.org/booking',
   product: 'exhibition',
 };
-const warning: Notification = { kind: 'SYSTEM_WARNING', reason: '사이트 구조 변경' };
+const warning: Notification = { kind: 'SYSTEM_WARNING', reason: '사이트 구조 변경', key: 'contract:exhibition' };
 
 const notifier = (fetchImpl: typeof fetch) => {
   vi.stubGlobal('fetch', fetchImpl);
@@ -27,14 +27,20 @@ const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200 }
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('슬롯 라벨', () => {
+describe('알림 라벨', () => {
   it('슬롯 알림은 날짜·시각으로 고유 라벨을 만든다', () => {
-    expect(slotLabel(booked)).toBe('slot:2026-03-14T10:00');
-    expect(slotLabel(needsAction)).toBe('slot:2026-03-14T10:00');
+    expect(alertLabel(booked)).toBe('slot:2026-03-14T10:00');
+    expect(alertLabel(needsAction)).toBe('slot:2026-03-14T10:00');
   });
 
-  it('시스템 경고는 슬롯에 묶이지 않는다', () => {
-    expect(slotLabel(warning)).toBeNull();
+  it('시스템 경고도 문제별 라벨로 묶인다 — 라벨이 없어 9/19에 이슈가 99개 쌓였다', () => {
+    expect(alertLabel(warning)).toBe('system:contract:exhibition');
+    expect(alertLabel({ kind: 'SYSTEM_WARNING', reason: 'x' })).toBe('system:general');
+  });
+
+  it('예약 오픈은 상품과 첫 날짜로 묶인다', () => {
+    expect(alertLabel({ kind: 'OPENED', product: 'exhibition', dates: ['2026-12-03', '2026-12-04'] }))
+      .toBe('opened:exhibition:2026-12-03');
   });
 });
 
@@ -103,19 +109,6 @@ describe('중복 알림 억제', () => {
     expect(body.labels).toContain('slot:2026-03-14T10:00');
   });
 
-  it('시스템 경고는 슬롯 중복 검사를 거치지 않는다', async () => {
-    // 경고에는 슬롯 라벨이 없다. 조회를 시도하면 엉뚱한 라벨로 묻게 된다.
-    const calls: string[] = [];
-    const n = notifier((async (url: string | URL | Request, init?: RequestInit) => {
-      calls.push(`${init?.method ?? 'GET'} ${String(url)}`);
-      if (init?.method === 'POST') return ok({ number: 9 });
-      throw new Error('경고 알림은 이슈를 조회하면 안 된다');
-    }) as typeof fetch);
-
-    await n.send(warning);
-    expect(calls.filter((c) => c.startsWith('POST'))).toHaveLength(1);
-  });
-
   it('이슈 조회가 실패하면 발송하지 않고 오류를 낸다', async () => {
     // 조회 실패를 "없음"으로 해석하면 매 틱마다 이슈가 쌓여 알림이 폭주한다.
     const n = notifier((async (_url: string | URL | Request, init?: RequestInit) => {
@@ -126,15 +119,89 @@ describe('중복 알림 억제', () => {
     await expect(n.send(booked)).rejects.toThrow(/중복 알림을 막기 위해/);
   });
 
-  it('시스템 경고는 중복 검사 없이 항상 발송된다', async () => {
+});
+
+describe('시스템 경고 — 문제 하나에 이슈 하나', () => {
+  it('같은 문제의 경고가 열려 있으면 새 이슈를 만들지 않는다', async () => {
+    // 예전에는 경고가 중복 검사 없이 항상 발송됐다. 2026-09-19 저녁 같은 경고가
+    // 5분마다 새 이슈가 되어 99건 쌓였고, 그 이슈들이 실제 감시 신청을 목록 밖으로 밀어냈다.
+    const posts: string[] = [];
+    const n = notifier((async (url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST') { posts.push(String(url)); return ok({ id: 1 }); }
+      return ok(openIssue(5)); // 5분 전에 이미 경고했다
+    }) as typeof fetch);
+
+    expect(await n.send(warning)).toBe(false);
+    expect(posts).toHaveLength(0);
+  });
+
+  it('경고는 6시간이 지나야 "아직 해결되지 않았다"고 다시 알린다', async () => {
+    const posts: Array<{ url: string; body: string }> = [];
+    const n = notifier((async (url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST') { posts.push({ url: String(url), body: String(init.body) }); return ok({ id: 1 }); }
+      return ok(openIssue(2 * 60)); // 2시간 전 — 아직 조용히 있는다
+    }) as typeof fetch);
+    expect(await n.send(warning)).toBe(false);
+
+    const later = notifier((async (url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST') { posts.push({ url: String(url), body: String(init.body) }); return ok({ id: 1 }); }
+      return ok(openIssue(7 * 60)); // 7시간 전
+    }) as typeof fetch);
+    expect(await later.send(warning)).toBe(true);
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.url).toContain('/issues/1/comments');
+    expect(JSON.parse(posts[0]!.body).body).toContain('아직 해결되지 않았습니다');
+  });
+
+  it('처음 나는 경고는 라벨을 붙여 이슈로 만든다', async () => {
     const posts: RequestInit[] = [];
     const n = notifier((async (_url: string | URL | Request, init?: RequestInit) => {
       if (init?.method === 'POST') { posts.push(init); return ok({ number: 3 }); }
-      throw new Error('경고는 이슈를 조회하지 않아야 한다');
+      return ok([]);
     }) as typeof fetch);
 
-    await n.send(warning);
-    expect(posts).toHaveLength(1);
+    expect(await n.send(warning)).toBe(true);
+    expect(JSON.parse(String(posts[0]?.body)).labels).toEqual(['audeum-alert', 'system:contract:exhibition']);
+  });
+
+  it('복구되면 열린 경고 이슈에 알리고 닫는다', async () => {
+    const calls: Array<{ method: string; url: string; body?: string }> = [];
+    const n = notifier((async (url: string | URL | Request, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      calls.push({ method, url: String(url), ...(init?.body ? { body: String(init.body) } : {}) });
+      return method === 'GET' ? ok(openIssue(30)) : ok({});
+    }) as typeof fetch);
+
+    expect(await n.send({ kind: 'SYSTEM_RECOVERED', key: 'contract:exhibition', note: '정상 확인' })).toBe(true);
+    expect(calls[0]?.url).toContain(encodeURIComponent('system:contract:exhibition'));
+    expect(calls.find((c) => c.method === 'POST')?.url).toContain('/issues/1/comments');
+    const close = calls.find((c) => c.method === 'PATCH');
+    expect(close?.url).toMatch(/\/issues\/1$/);
+    expect(JSON.parse(close!.body!).state).toBe('closed');
+  });
+
+  it('복구할 경고가 없으면 아무것도 하지 않는다 — 매 확인마다 불리므로', async () => {
+    const writes: string[] = [];
+    const n = notifier((async (url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method) writes.push(`${init.method} ${String(url)}`);
+      return ok([]);
+    }) as typeof fetch);
+
+    expect(await n.send({ kind: 'SYSTEM_RECOVERED', key: 'contract:exhibition', note: '정상' })).toBe(false);
+    expect(writes).toHaveLength(0);
+  });
+});
+
+describe('예약 오픈 알림', () => {
+  it('같은 오픈은 한 번만 알린다', async () => {
+    const posts: string[] = [];
+    const n = notifier((async (url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST') { posts.push(String(url)); return ok({}); }
+      return ok(openIssue(60 * 24 * 3)); // 사흘 전에 알렸어도 다시 알리지 않는다
+    }) as typeof fetch);
+
+    expect(await n.send({ kind: 'OPENED', product: 'exhibition', dates: ['2026-12-03'] })).toBe(false);
+    expect(posts).toHaveLength(0);
   });
 });
 

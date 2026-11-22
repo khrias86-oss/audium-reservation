@@ -1,7 +1,9 @@
 # audeum-reservation
 
 오디움(https://audeum.org/booking) 관람 예약(전시·렉처, 두 상품 독립)을 5분 주기로
-감시하고, 빈자리 발생 시 이메일로 알린 뒤 자동으로 예약하는 개인용 시스템.
+감시하고, 빈자리가 나면 **신청자 각자에게** 메일·푸시로 알리는 공개 알림 서비스.
+누구나 공개 페이지에서 날짜·회차를 고르고 메일을 넣어 신청한다 (가입·GitHub 불필요).
+자동 예약은 하지 않는다 — 휴대폰 인증 + Turnstile이 막고 있다 (`docs/auto-booking.md`).
 
 **지금은 전시만 감시한다.** 렉처는 2026-11에 사용자 요청으로 껐다 (seqProgram=7이
 9월부터 500). 켜고 끄는 스위치는 `contract.ts`의 `ACTIVE_PRODUCTS` 하나이고,
@@ -14,17 +16,25 @@
 하나의 이미지가 두 모드로 돈다. 배포처에 결합되어 있지 않다.
 
 ```
-GitHub Actions cron ──▶ src/watch-once.ts    ← 실제로 도는 경로 (전시/렉처 완전 분리)
-                              │
-                              ├─ GitHub 이슈(감시 요청) 읽기 — product별로 나눠 처리
-                              ├─ src/adapters/audeum/http-flow.ts  ← 폼 POST 1건
-                              │     └─ parse-time-fragment.ts      ← 여석 판단
-                              └─ 이슈로 알림
+공개 페이지 (docs-site/index.html, GitHub Pages)
+   │ 신청·취소 (text/plain JSON)
+   ▼
+알림 서버 (mailer/Code.gs — 주인 Google 계정의 Apps Script)
+   │  신청 목록 = 주인의 구글 시트 (메일 주소는 여기에만 있다)
+   │  알림 규칙: 즉시 1번 → 10분 뒤 재확인해 남아 있으면 1번 더 (decideAlert)
+   │  발송: 주인 Gmail(MailApp) + 신청별 ntfy 채널
+   ▲
+   │ wants(볼 회차만, 메일 주소 없음) / report(본 결과) / opening(오픈 알림) — MAILER_KEY 필요
+GitHub Actions cron ──▶ src/watch-once.ts    ← 5분마다 (전시/렉처 완전 분리)
+                              ├─ src/watch/observe.ts  ← 회차별 관찰 (모르는 것은 보내지 않는다)
+                              │     └─ src/adapters/audeum/http-flow.ts  ← 폼 POST 1건
+                              └─ 시스템 경고만 GitHub 이슈로 (주인에게, 라벨로 묶고 복구되면 닫힘)
 
-                        같은 실행마다 (감시 요청 유무와 무관하게) ↓
+                        같은 실행마다 (신청 유무와 무관하게) ↓
                    src/snapshot.ts → src/adapters/audeum/build-snapshot.ts
                               │        (요일을 추측하지 않는다 — /booking/date가
                               │         실측으로 밝힌 "열린 날짜"만 쓴다)
+                              ├─▶ 오픈 예고·열림 → 알림 서버 opening
                               └─▶ docs-site/data/availability.json 커밋
                                         │
                                         └─▶ pages.yml이 재배포 (CHAIN_TOKEN으로 깨움 —
@@ -56,7 +66,7 @@ Source: GitHub Actions`를 사람이 한 번 눌러야 한다. Actions 기본 �
 Pages *사이트를 새로 만들* 권한이 없고 이미 켜진 곳에 배포할 권한뿐이라
 (`Resource not accessible by integration`), 자동화로 우회하지 않는다.
 켜기 전까지는 미리보기 사본이 유일한 확인 경로다.
-페이지에는 비밀이 없다 — 토큰과 예약 정보는 사용자 브라우저의 localStorage에만 있다.
+페이지에는 비밀이 없다 — 신청 기록(취소 토큰)은 그 브라우저의 localStorage에만 있다.
 
 **핵심 규칙: `src/core/`는 오디움을 몰라야 한다.** core는 정규화된 `Slot` 타입만 다루고,
 사이트 고유의 셀렉터·URL·응답 스키마는 `src/adapters/audeum/contract.ts` 한 파일에만 존재한다.
@@ -68,7 +78,7 @@ Pages *사이트를 새로 만들* 권한이 없고 이미 켜진 곳에 배포�
 - 봇 탐지 회피 코드 금지 — 프록시 로테이션, UA 위조, 헤드리스 은닉, CAPTCHA 자동 해제
 - `.env`, 쿠키/세션 파일(`storage-state.json`), `runs/`, 예약자 개인정보 커밋 금지
   — **저장소가 public이므로 이메일·전화번호도 파일에 적지 않는다.** 크롤러가 수집한다.
-  예약자 정보가 필요하면 GitHub Secrets(`APPLICANT_NAME`, `APPLICANT_EMAIL`)로만 주입한다
+  신청자 메일 주소는 알림 서버(주인의 구글 시트)에만 둔다. 감시 쪽 코드·로그에 닿게 하지 않는다
 - 실제 사이트를 대상으로 한 반복 테스트 금지 → `tests/fixtures/` 사용
 - 테스트를 skip/disable해서 통과시키지 않는다. 실패하면 테스트가 아니라 코드를 고친다
 - 티켓 재판매·대리예약·다중 계정 기능은 만들지 않는다
@@ -90,15 +100,17 @@ pnpm test
 - [x] M1 정찰 — 14차까지 완료. 조회·요청 계약 확정 (`docs/site-contract.md`)
 - [x] M2 코어 로직
 - [x] M3 폴링 루프 — 실제로 돌고 있고, 실제 취소표를 한 번 잡아냈다
-- [x] M4 알림 — GitHub 이슈로 보낸다 (앱 푸시 + 이메일이 딸려 온다)
-- [x] M5 UI — `docs-site/index.html` 모바일 달력. 전시·렉처를 완전히 독립된
-      카드로 그리고, `docs-site/data/availability.json`(실측 당월 매진/여석)을
-      읽어 실제 상태를 보여준다. 서버 없이 이슈 주소로 넘긴다
+- [x] M4 알림 — **신청자별** 메일·ntfy 푸시 (알림 서버 `mailer/Code.gs`, 설정은
+      `mailer/설정방법.md`: 변수 `MAILER_URL`, 시크릿 `MAILER_KEY`). 빈자리는 즉시 1번,
+      10분 뒤 재확인해 남아 있으면 1번 더. 예약 오픈 예고·열림 알림도 신청받는다.
+      GitHub 이슈는 **시스템 경고 전용** — 라벨(`system:<key>`)로 묶어 6시간에 한 번만,
+      복구되면 스스로 닫는다 (2026-09-19 경고 99건 폭주의 재발 방지)
+- [x] M5 UI — `docs-site/index.html` 한 화면. 달력(실측 두 달) → 회차 → 메일 → 신청,
+      신청 후 ntfy 3단계 안내, "이 기기에서 신청한 알림" 끄기 (`docs-site/README.md`)
 - [~] M6 자동예약 — **휴대폰 인증 + Cloudflare Turnstile이 막고 있다.**
       뚫지 않는다. 관문 앞까지 자동화하는 것이 최대치다. `docs/auto-booking.md` 참고
-- [~] M7 배포 — GitHub Actions (감시)는 돈다. GitHub Pages (신청 페이지)는
-      워크플로가 준비돼 있지만 **저장소 설정에서 아직 켜지지 않았다** — 사람이
-      `Settings → Pages → Source: GitHub Actions`를 한 번 눌러야 한다
+- [~] M7 배포 — GitHub Actions (감시)는 돈다. 남은 사람 손: Pages 켜기
+      (`Settings → Pages → Source: GitHub Actions`), 알림 서버 올리기 (`mailer/설정방법.md`)
 
 정찰은 두 워크플로로 돈다.
 - `recon.yml` — `recon-run` 브랜치 푸시. 브라우저 정찰(구식, 느림)

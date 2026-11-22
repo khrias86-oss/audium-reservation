@@ -37,10 +37,9 @@ name: 🔔 오디움 빈자리 감시
 # 무한 루프를 막기 위한 장치다. 그 장치를 존중하되, 사람이 명시적으로 넣은
 # 토큰으로는 이어가게 한다. 시크릿이 없으면 이어가지 않고 조용히 끝난다.
 #
-# **멈추는 방법은 감시 신청 이슈를 전부 닫는 것이다.** 이어가기 직전에 신청이
-# 남아 있는지 다시 확인하므로, 이슈를 닫으면 다음 실행이 걸리지 않는다.
-# 무한히 도는 것에는 반드시 사람이 끌 수 있는 스위치가 있어야 하고,
-# 이 시스템에서 그 스위치는 이미 이슈다.
+# **볼 신청이 없으면 멈춘다.** 이어가기 직전에 알림 서버(Apps Script)에 남은 신청을
+# 다시 묻는다. 신청은 회차 1시간 전에 저절로 끝나고, 신청자가 "알림 끄기"를 누르거나
+# 주인이 신청 목록 시트에서 줄을 지우면 바로 빠진다. 그것이 사람이 끌 수 있는 스위치다.
 #
 # 시크릿이 없거나 이어가기가 실패해도 사람이 한 번 돌리면 된다 —
 # Actions 탭 → 이 워크플로 → Run workflow. 그 한 번으로 105분이 덮인다.
@@ -74,16 +73,16 @@ on:
     # 화~토 2시간마다. 정각을 피해 7분에 둔다 — GitHub 문서가 매시 정각을
     # 고부하 시간대로 지목한다.
     - cron: '7 0,2,4,6,8,10,12,14,16,18,20,22 * * 2-6'
+    # 예약 오픈 시간대(화요일 13:00~14:45 KST)에 15분마다 한 번 더 깨운다.
+    # 예약 실행은 자주 밀리거나 빠지므로 기회를 여러 번 둔다. 오픈 시간대가
+    # 아니면(격주의 빈 주) plan-run이 스냅샷 한 번만 하고 끝낸다.
+    - cron: '*/15 4-5 * * 2'
   workflow_dispatch:
     inputs:
       loop_minutes:
         description: '몇 분 동안 감시할지 (0이면 한 번만 확인)'
         type: string
         default: '105'
-      confirm_live_booking:
-        description: '⚠️ 실제로 예약합니다 (체크하지 않으면 확인만 합니다)'
-        type: boolean
-        default: false
 
 concurrency:
   # 이전 실행이 끝나기 전에 다음 실행이 겹치면 중복 예약 위험이 생긴다.
@@ -92,7 +91,7 @@ concurrency:
 
 permissions:
   contents: write # 당월 가용성 스냅샷을 커밋·푸시한다
-  issues: write   # 빈자리를 찾으면 이슈로 알린다
+  issues: write   # 감시 시스템 장애(사이트 구조 변경, 알림 서버 불통)를 주인에게 이슈로 알린다
 
 jobs:
   watch:
@@ -100,9 +99,9 @@ jobs:
     # 루프가 105분이므로 여유를 두고 자른다. 무언가 매달려도 여기서 끝난다.
     timeout-minutes: 115
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -111,60 +110,58 @@ jobs:
       # 실행에 필요한 것은 tsx·cheerio·zod뿐이고, 설치가 몇 초로 끝난다.
       - run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: 당월 가용성 스냅샷 갱신
+      - name: 가용성 스냅샷 갱신
         # 감시 요청이 0건이어도 돈다 — "무엇을 감시할지 고르는" 화면 자체가
         # 이 데이터로 그려지므로, 감시 요청의 존재 여부와 무관해야 한다.
+        # 새로 열린 날짜와 오픈 예고도 여기서 알린다.
+        env:
+          # 알림 서버: 주소는 공개 값이라 변수(vars), 열쇠는 시크릿이다.
+          MAILER_URL: ${{ vars.MAILER_URL }}
+          MAILER_KEY: ${{ secrets.MAILER_KEY }}
         run: npx tsx src/snapshot.ts
 
-      - name: 감시할 항목이 있는지 먼저 확인
-        id: check
+      - name: 이번 실행 계획
+        # 볼 회차 수는 알림 서버에 묻는다 — 서버가 끝난 신청을 먼저 지우고 센다.
+        id: plan
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # 신청서는 본문에 "### 관람 희망 날짜"가 있는 열린 이슈다.
-          #
-          # 예전에는 watch-request 라벨로 셌는데, 폰에서 낸 신청서에는 그 라벨이
-          # 붙지 않는다 — 신청 링크가 ?labels=를 담아 보내도 GitHub 모바일 웹이
-          # 조용히 버린다. 그래서 실제 신청이 있는데도 0으로 세고 그냥 끝냈다.
-          # 하나도 없을 때만 건너뛰면 되므로, 판별은 넉넉한 쪽이 안전하다.
-          count=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/issues?state=open&per_page=100" \
-            | grep -c '관람 희망 날짜' || true)
-          echo "count=$count" >> "$GITHUB_OUTPUT"
-          echo "감시 요청 $count건"
+          MAILER_URL: ${{ vars.MAILER_URL }}
+          MAILER_KEY: ${{ secrets.MAILER_KEY }}
+          LOOP_MINUTES: ${{ inputs.loop_minutes || '105' }}
+        run: npx tsx src/plan-run.ts
 
       - name: 빈자리 확인
-        if: steps.check.outputs.count != '0'
+        if: steps.plan.outputs.run == 'true'
         env:
+          # 시스템 경고(이슈)를 올릴 때만 쓴다. 이 경로는 예약을 제출하지 않는다 —
+          # 오디움 예약은 휴대폰 인증과 Turnstile이 막고 있고, 그것을 뚫지 않는다.
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          # 위험한 쪽(실제 예약)은 **명시적으로 참일 때만** 선택되게 한다.
-          #
-          # 이전 표현식은 `inputs.dry_run == false`였는데, push로 실행되면
-          # inputs가 비어 있고 GitHub 표현식에서 null == false 가 참이 되어
-          # 실제 예약 모드로 켜졌다. 첫 시험 운전이 실제로 그렇게 돌았다.
-          # 없는 값·모르는 값은 전부 안전한 쪽으로 떨어져야 한다.
-          DRY_RUN: ${{ inputs.confirm_live_booking == true && 'false' || 'true' }}
-          APPLICANT_NAME: ${{ secrets.APPLICANT_NAME }}
-          APPLICANT_EMAIL: ${{ secrets.APPLICANT_EMAIL }}
-          # 예약 실행이면 105분, 수동 실행이면 사람이 고른 값. 모르는 값은 0으로
-          # 떨어뜨려 한 번만 확인한다 — 실수로 오래 도는 것보다 짧은 편이 낫다.
-          LOOP_MINUTES: ${{ inputs.loop_minutes || '105' }}
+          MAILER_URL: ${{ vars.MAILER_URL }}
+          MAILER_KEY: ${{ secrets.MAILER_KEY }}
+          # 루프 길이는 plan-run이 정했다 (신청이 있으면 105분, 오픈 시간대면 그 끝까지).
+          LOOP_MINUTES: ${{ steps.plan.outputs.loop }}
+          WATCH: ${{ steps.plan.outputs.watch }}
+          OPENING_WINDOW: ${{ steps.plan.outputs.window }}
         run: |
           set -u
           loop=$(printf '%s' "${LOOP_MINUTES:-0}" | tr -cd '0-9')
           loop=${loop:-0}
           deadline=$(( $(date +%s) + loop * 60 ))
-          echo "감시 시작 — ${loop}분 동안 5분 간격으로 확인합니다."
+          echo "감시 시작 — ${loop}분 동안 5분 간격 (신청 확인: ${WATCH}, 오픈 시간대: ${OPENING_WINDOW})"
 
           checks=0
           failures=0
           while :; do
             checks=$(( checks + 1 ))
             echo "::group::확인 #${checks} ($(date -u '+%H:%M:%S') UTC)"
+            # 오픈 시간대에는 매번 스냅샷을 다시 떠서 새로 열린 날짜를 바로 알린다.
+            # 첫 번째는 앞 단계에서 이미 떴으므로 건너뛴다.
+            if [ "$OPENING_WINDOW" = "true" ] && [ "$checks" -gt 1 ]; then
+              npx tsx src/snapshot.ts || echo "스냅샷 갱신 실패 — 다음 확인에서 다시 시도합니다."
+            fi
             # 한 번 실패했다고 감시를 멈추지 않는다. 사이트가 잠깐 흔들리는 것과
             # 감시를 통째로 포기하는 것은 전혀 다른 무게다.
-            if ! npx tsx src/watch-once.ts; then
+            if [ "$WATCH" = "true" ] && ! npx tsx src/watch-once.ts; then
               failures=$(( failures + 1 ))
               echo "이번 확인이 실패했습니다 (누적 ${failures}회) — 계속 감시합니다."
             fi
@@ -191,17 +188,18 @@ jobs:
           fi
 
       - name: 감시 요청이 없을 때
-        if: steps.check.outputs.count == '0'
-        run: echo "감시 중인 항목이 없습니다. 이슈로 '빈자리 감시 신청'을 등록하세요." >> "$GITHUB_STEP_SUMMARY"
+        if: steps.plan.outputs.run != 'true'
+        run: echo "볼 신청이 없습니다. 공개 페이지에서 알림을 신청하면 다음 실행부터 확인합니다." >> "$GITHUB_STEP_SUMMARY"
 
       # 예약 실행을 믿을 수 없으므로 스스로 이어간다. 자세한 이유는 머리말에 있다.
       - name: 다음 실행 이어가기
         # always()인 이유: 확인이 몇 번 실패했다고 감시가 끊기면 안 된다.
         # 실패했다는 것은 오히려 계속 지켜봐야 한다는 뜻이다.
-        if: always() && steps.check.outputs.count != '0'
+        if: always() && steps.plan.outputs.watch == 'true'
         env:
           CHAIN_TOKEN: ${{ secrets.CHAIN_TOKEN }}
-          GH_TOKEN: ${{ github.token }}
+          MAILER_URL: ${{ vars.MAILER_URL }}
+          MAILER_KEY: ${{ secrets.MAILER_KEY }}
           REPO: ${{ github.repository }}
         run: |
           set -u
@@ -217,14 +215,12 @@ jobs:
             exit 0
           fi
 
-          # 루프가 도는 사이에 사용자가 신청을 닫았을 수 있다. 그게 유일한
-          # 정지 스위치이므로, 걸기 직전에 반드시 다시 확인한다.
-          still=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/$REPO/issues?state=open&per_page=100" \
-            | grep -c '관람 희망 날짜' || true)
+          # 루프가 도는 사이에 신청이 모두 끝났거나 꺼졌을 수 있다. 걸기 직전에 다시 묻는다.
+          # 서버가 지난 신청을 먼저 지우고 세므로, 모든 회차가 지나면 루프가 저절로 멈춘다.
+          still=$(npx tsx src/plan-run.ts --count 2>/dev/null || echo 0)
           if [ "$still" = "0" ]; then
-            echo "감시 신청이 모두 닫혔습니다 — 이어가지 않습니다."
-            echo "감시 신청이 모두 닫혀 감시를 멈춥니다." >> "$GITHUB_STEP_SUMMARY"
+            echo "볼 신청이 없습니다 — 이어가지 않습니다."
+            echo "볼 신청이 없어 감시를 멈춥니다." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
@@ -236,8 +232,8 @@ jobs:
             -d '{"ref":"main","inputs":{"loop_minutes":"105"}}')
 
           if [ "$code" = "204" ]; then
-            echo "다음 실행을 걸었습니다 (감시 신청 ${still}건)."
-            echo "다음 감시를 이어서 걸었습니다 (신청 ${still}건)." >> "$GITHUB_STEP_SUMMARY"
+            echo "다음 실행을 걸었습니다 (볼 회차 ${still}개)."
+            echo "다음 감시를 이어서 걸었습니다 (볼 회차 ${still}개)." >> "$GITHUB_STEP_SUMMARY"
           else
             # 여기서 실패하면 감시가 끊긴다. 조용히 넘기면 사용자가 모른다.
             {
