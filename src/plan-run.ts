@@ -1,30 +1,30 @@
 /**
  * 워크플로 맨 앞에서 이번 실행의 계획을 정한다 (`src/core/run-plan.ts`).
  *
- * 예전에는 bash에서 `issues?per_page=100 | grep -c '관람 희망 날짜'`로 신청을 셌다.
- * 그 방식은 (1) 100건 넘는 이슈에서 신청을 놓쳤고, (2) 이미 지난 신청도 세어서
- * 감시 루프가 끝없이 이어졌다. 이제 감시와 똑같은 규칙(`parseWatchRequests`,
- * `isExpired`)으로 센다.
+ * 볼 회차 수는 알림 서버에 묻는다 — 서버가 끝난 신청(회차 1시간 전)을 먼저 지우고
+ * 남은 것만 주므로, 모든 신청이 끝나면 감시 루프가 저절로 멈춘다.
  *
- * `--count`: 지나지 않은 신청 수만 출력한다 (다음 실행을 이어 걸지 정할 때 쓴다).
+ * `--count`: 볼 회차 수만 출력한다 (다음 실행을 이어 걸지 정할 때 쓴다).
  */
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
-import { isExpired, parseWatchRequests } from './config/watch-requests.js';
-import { listOpenIssues } from './github/issues.js';
+import { alertServerFromEnv } from './notify/alert-server.js';
 import { planRun } from './core/run-plan.js';
 
-const token = process.env['GITHUB_TOKEN'];
-const [owner, repo] = (process.env['GITHUB_REPOSITORY'] ?? '').split('/');
-if (!token || !owner || !repo) {
-  console.error('GITHUB_TOKEN과 GITHUB_REPOSITORY가 필요합니다.');
-  process.exit(1);
+const now = new Date();
+const server = alertServerFromEnv(process.env);
+
+let active = 0;
+let serverError: string | null = null;
+if (server) {
+  try {
+    active = (await server.wants()).slots.length;
+  } catch (error) {
+    serverError = error instanceof Error ? error.message : String(error);
+  }
 }
 
-const now = new Date();
-const { requests } = parseWatchRequests(await listOpenIssues({ owner, repo, token }));
-const active = requests.filter((r) => !isExpired(r, now)).length;
-
 if (process.argv.includes('--count')) {
+  // 서버에 닿지 못하면 0 — 장애 중에 105분짜리 실행을 끝없이 이어 걸지 않는다.
   console.log(active);
   process.exit(0);
 }
@@ -41,14 +41,19 @@ if (existsSync(snapshotPath)) {
 }
 
 const requested = Number.parseInt(process.env['LOOP_MINUTES'] ?? '', 10);
-const plan = planRun({
-  now, activeRequests: active, openingGuesses: guesses,
-  ...(Number.isFinite(requested) ? { requestedLoopMinutes: requested } : {}),
-});
+const plan = serverError
+  // 서버 장애: 한 번만 확인해서 watch-once가 주인에게 경고 이슈를 올리게 한다.
+  ? { ...planRun({ now, activeRequests: 1, openingGuesses: guesses, requestedLoopMinutes: 0 }) }
+  : planRun({
+    now, activeRequests: active, openingGuesses: guesses,
+    ...(Number.isFinite(requested) ? { requestedLoopMinutes: requested } : {}),
+  });
 
-console.log(`감시 신청 ${active}건 (지난 신청 ${requests.length - active}건 제외)`);
+if (!server) console.log('알림 서버 설정 전입니다 (MAILER_URL, MAILER_KEY) — 달력만 갱신합니다.');
+if (serverError) console.log(`알림 서버에 닿지 못했습니다: ${serverError}`);
+console.log(`볼 회차 ${active}개`);
 console.log(`오픈 예상: ${guesses.join(', ') || '모름 — 화요일 13~15시를 본다'}`);
-console.log(`계획: 신청 확인 ${plan.watch ? '함' : '안 함'}, 오픈 시간대 ${plan.openingWindow ? '맞음' : '아님'}, 루프 ${plan.loopMinutes}분`);
+console.log(`계획: 회차 확인 ${plan.watch ? '함' : '안 함'}, 오픈 시간대 ${plan.openingWindow ? '맞음' : '아님'}, 루프 ${plan.loopMinutes}분`);
 
 const out = process.env['GITHUB_OUTPUT'];
 if (out) {

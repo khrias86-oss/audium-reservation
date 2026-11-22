@@ -80,6 +80,21 @@ jobs:
           echo "Pages가 꺼져 있습니다. 위 안내대로 한 번만 켜주세요."
           exit 1
 
+      - name: 알림 서버 주소 넣기
+        # 페이지가 신청을 보낼 곳. 저장소 변수 MAILER_URL(Apps Script 웹 앱 주소)에서 온다.
+        # 공개 페이지가 부르는 주소라 비밀이 아니다 — 보호는 서버 쪽(열쇠·토큰)이 한다.
+        # 모양이 맞을 때만 넣는다. 없으면 페이지는 "준비 중"을 보여주고 달력만 그린다.
+        env:
+          MAILER_URL: ${{ vars.MAILER_URL }}
+        run: |
+          if printf '%s' "${MAILER_URL:-}" | grep -Eq '^https://script\.google\.com/macros/s/[A-Za-z0-9_-]+/exec$'; then
+            printf '{"mailerUrl":"%s"}\n' "$MAILER_URL" > docs-site/config.json
+            echo "알림 서버 주소를 넣었습니다."
+          else
+            echo '{}' > docs-site/config.json
+            echo "::warning::저장소 변수 MAILER_URL이 없거나 모양이 다릅니다 — 페이지는 신청을 받지 않습니다."
+          fi
+
       - name: 페이지 올리기
         uses: actions/upload-pages-artifact@v3
         with:

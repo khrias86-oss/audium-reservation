@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { openingWindowEnd, planRun } from '../src/core/run-plan.js';
-import { isExpired } from '../src/config/watch-requests.js';
 
 /** KST 시각을 Date로 */
 const kst = (s: string) => new Date(`${s}+09:00`);
@@ -47,21 +46,5 @@ describe('실행 계획', () => {
   it('사람이 고른 감시 시간을 따르되 105분을 넘기지 않는다', () => {
     expect(planRun({ now: kst('2026-11-25T10:00:00'), activeRequests: 1, openingGuesses: [], requestedLoopMinutes: 0 }).loopMinutes).toBe(0);
     expect(planRun({ now: kst('2026-11-25T10:00:00'), activeRequests: 1, openingGuesses: [], requestedLoopMinutes: 500 }).loopMinutes).toBe(105);
-  });
-});
-
-describe('지난 감시 신청', () => {
-  it('회차 시작 1시간 전부터는 지난 것으로 본다', () => {
-    const r = { date: '2026-09-19', time: '13:30' };
-    expect(isExpired(r, kst('2026-09-19T12:29:00'))).toBe(false);
-    expect(isExpired(r, kst('2026-09-19T12:30:00'))).toBe(true);
-    // 9/19 저녁 경고가 쌓이던 시각 — 이 신청은 이미 감시 대상이 아니었어야 했다.
-    expect(isExpired(r, kst('2026-09-19T22:06:00'))).toBe(true);
-  });
-
-  it('실행 환경 타임존과 무관하게 KST로 판단한다', () => {
-    // Actions는 UTC로 돈다. 2026-11-26 10:00 KST = 2026-11-26 01:00 UTC.
-    expect(isExpired({ date: '2026-11-26', time: '10:00' }, new Date('2026-11-25T23:59:00Z'))).toBe(false);
-    expect(isExpired({ date: '2026-11-26', time: '10:00' }, new Date('2026-11-26T00:00:00Z'))).toBe(true);
   });
 });

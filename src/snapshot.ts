@@ -15,8 +15,8 @@ import { fetchOpenDates, fetchSlotsForDates } from './adapters/audeum/http-flow.
 import { ACTIVE_PRODUCTS } from './adapters/audeum/contract.js';
 import { buildProductSnapshot, newlyOpenedDates, wrapSnapshot, toKstDateString } from './adapters/audeum/build-snapshot.js';
 import type { FullSnapshot, ProductSnapshot } from './adapters/audeum/build-snapshot.js';
-import { createGitHubIssueNotifier } from './notify/github-issue.js';
-import { createFamilyNotifier, familyConfigFromEnv, fanOut } from './notify/family.js';
+import { alertServerFromEnv, type OpeningEvent } from './notify/alert-server.js';
+import { openedAlert, openingSoonAlert } from './notify/alert-text.js';
 import type { Notification } from './notify/types.js';
 import type { Slot } from './core/types.js';
 
@@ -88,8 +88,8 @@ function commitIfChanged(path: string): void {
 /**
  * 직전 스냅샷과 비교해 알릴 것을 고른다 — 새로 열린 날짜, 곧 열릴 것 같은 오픈.
  *
- * 오픈 예고는 예상 시각 90분 전부터 그 시각까지만 보낸다. 같은 날 두 번 보내지
- * 않는 것은 이슈 라벨(`opening-soon:날짜`)이 맡는다.
+ * 오픈 예고는 예상 시각 90분 전부터 그 시각까지 매번 나온다. 같은 신청자에게 두 번
+ * 가지 않게 하는 것은 알림 서버가 맡는다 (신청마다 "이 시각 예고를 보냈음"을 적어 둔다).
  */
 export function notificationsFor(previous: FullSnapshot | null, next: FullSnapshot, now: Date): Notification[] {
   const out: Notification[] = [];
@@ -109,24 +109,26 @@ export function notificationsFor(previous: FullSnapshot | null, next: FullSnapsh
   return out;
 }
 
+/** 오픈 알림을 알림 서버가 받는 모양으로 바꾼다. 오픈과 무관한 알림은 null. */
+export function openingEventFor(n: Notification): OpeningEvent | null {
+  if (n.kind === 'OPENED') return { event: 'opened', product: n.product, ...openedAlert(n.product, n.dates) };
+  if (n.kind === 'OPENING_SOON') return { event: 'soon', product: n.product, at: n.at, ...openingSoonAlert(n.product, n.at) };
+  return null;
+}
+
 async function notify(list: readonly Notification[]): Promise<void> {
   if (list.length === 0) return;
-  const token = process.env['GITHUB_TOKEN'];
-  const [owner, repo] = (process.env['GITHUB_REPOSITORY'] ?? '').split('/');
-  if (!token || !owner || !repo) {
-    console.log(`알릴 것이 ${list.length}건 있지만 GITHUB_TOKEN이 없어 보내지 않습니다 (로컬 실행).`);
+  const server = alertServerFromEnv(process.env);
+  if (!server) {
+    console.log(`알릴 것이 ${list.length}건 있지만 알림 서버 설정(MAILER_URL, MAILER_KEY)이 없어 보내지 않습니다.`);
     return;
   }
-  const log = (line: string) => console.log(line);
-  const notifier = fanOut(
-    createGitHubIssueNotifier({ owner, repo, token }),
-    [createFamilyNotifier(familyConfigFromEnv(process.env, log))],
-    log,
-  );
   for (const n of list) {
+    const event = openingEventFor(n);
+    if (!event) continue;
     try {
-      const sent = await notifier.send(n);
-      console.log(`${n.kind}: ${sent === false ? '이미 알림 — 건너뜀' : '알림 보냄'}`);
+      const d = await server.opening(event);
+      console.log(`${n.kind}: 오픈 알림 신청자 ${d.alerted}명에게 보냄 (메일 ${d.mailed}, 푸시 ${d.pushed})`);
     } catch (error) {
       // 알림 실패가 스냅샷 커밋을 막으면 안 된다. 달력은 그것대로 갱신돼야 한다.
       console.error(`${n.kind} 알림 실패:`, error instanceof Error ? error.message : String(error));
