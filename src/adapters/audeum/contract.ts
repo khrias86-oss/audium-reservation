@@ -247,6 +247,15 @@ export const PRODUCT_SEQ = {
   lecture: '7',
 } as const;
 
+/**
+ * 지금 감시하고 달력에 보여주는 상품. 스냅샷·감시·공개 페이지가 모두 이 목록을 따른다.
+ *
+ * 렉처는 2026-11에 사용자 요청으로 껐다. 9월부터 `/programs/date`가 seqProgram=7에
+ * 500을 돌려주는데(강연이 끝난 것으로 보인다), 달력에는 그 실패가 "아직 안 열림"으로
+ * 보여 오해를 샀다. 새 렉처 번호를 정찰로 확인한 뒤 PRODUCT_SEQ를 고치고 여기에 다시 넣는다.
+ */
+export const ACTIVE_PRODUCTS: readonly (keyof typeof PRODUCT_SEQ)[] = ['exhibition'];
+
 /** 사이트가 실제로 보낸 헤더. 위조가 아니라 관측한 값을 그대로 쓴다. */
 export const REQUEST_HEADERS = {
   'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',

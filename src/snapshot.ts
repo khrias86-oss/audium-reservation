@@ -12,6 +12,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fetchOpenDates, fetchSlotsForDates } from './adapters/audeum/http-flow.js';
+import { ACTIVE_PRODUCTS } from './adapters/audeum/contract.js';
 import { buildProductSnapshot, wrapSnapshot, toKstDateString } from './adapters/audeum/build-snapshot.js';
 import type { ProductSnapshot } from './adapters/audeum/build-snapshot.js';
 import type { Slot } from './core/types.js';
@@ -81,12 +82,9 @@ function commitIfChanged(path: string): void {
 
 export async function main(): Promise<void> {
   const today = toKstDateString(new Date());
-  const [exhibition, lecture] = await Promise.all([
-    snapshotFor('exhibition', today),
-    snapshotFor('lecture', today),
-  ]);
+  const products = await Promise.all(ACTIVE_PRODUCTS.map((product) => snapshotFor(product, today)));
 
-  const snapshot = wrapSnapshot(new Date(), [exhibition, lecture]);
+  const snapshot = wrapSnapshot(new Date(), products);
   const json = JSON.stringify(snapshot, null, 2) + '\n';
 
   mkdirSync('docs-site/data', { recursive: true });
